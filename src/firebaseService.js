@@ -41,7 +41,6 @@ export const auth = getAuth(app);
 // FIRESTORE CRUD OPERATIONS
 // ============================================================
 
-// Add document to collection
 export const addToFirestore = async (collectionName, data) => {
   try {
     const docRef = await addDoc(collection(db, collectionName), {
@@ -56,7 +55,6 @@ export const addToFirestore = async (collectionName, data) => {
   }
 };
 
-// Get all documents from collection
 export const getAllFromFirestore = async (collectionName) => {
   try {
     const querySnapshot = await getDocs(collection(db, collectionName));
@@ -71,7 +69,6 @@ export const getAllFromFirestore = async (collectionName) => {
   }
 };
 
-// Get documents with filter
 export const getFilteredFromFirestore = async (collectionName, field, operator, value) => {
   try {
     const q = query(collection(db, collectionName), where(field, operator, value));
@@ -87,7 +84,6 @@ export const getFilteredFromFirestore = async (collectionName, field, operator, 
   }
 };
 
-// Update document
 export const updateInFirestore = async (collectionName, docId, data) => {
   try {
     const docRef = doc(db, collectionName, docId);
@@ -102,7 +98,6 @@ export const updateInFirestore = async (collectionName, docId, data) => {
   }
 };
 
-// Delete document
 export const deleteFromFirestore = async (collectionName, docId) => {
   try {
     await deleteDoc(doc(db, collectionName, docId));
@@ -113,7 +108,6 @@ export const deleteFromFirestore = async (collectionName, docId) => {
   }
 };
 
-// Real-time listener for collection
 export const listenToCollection = (collectionName, callback, filterField = null, filterValue = null) => {
   try {
     let q;
@@ -142,78 +136,118 @@ export const listenToCollection = (collectionName, callback, filterField = null,
 };
 
 // ============================================================
-// AUTHENTICATION OPERATIONS
+// AUTHENTICATION OPERATIONS - FIXED VERSION
 // ============================================================
 
-// Register new user
 export const registerUser = async (email, password, userData) => {
   try {
+    console.log('🔵 Starting registration for:', email);
+    
+    // Step 1: Create Firebase Auth user
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
+    console.log('✅ Firebase Auth user created:', user.uid);
     
-    // Save user data to Firestore
+    // Step 2: Prepare user data for Firestore
     const ownerData = {
       userId: user.uid,
       email: user.email,
-      ...userData,
+      businessName: userData.businessName,
+      ownerName: userData.ownerName,
+      phone: userData.phone || '',
+      role: 'owner',
       createdAt: Date.now()
     };
     
-    await setDoc(doc(db, 'owners', user.uid), ownerData);
+    console.log('🔵 Saving to Firestore:', ownerData);
     
-    return { success: true, user: { id: user.uid, ...ownerData } };
+    // Step 3: Save to Firestore using UID as document ID
+    await setDoc(doc(db, 'owners', user.uid), ownerData);
+    console.log('✅ User data saved to Firestore');
+    
+    // Step 4: Return user with ID
+    return { 
+      success: true, 
+      user: { 
+        id: user.uid, 
+        ...ownerData 
+      } 
+    };
+    
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('❌ Registration error:', error);
     let errorMessage = 'Registration failed';
+    
     if (error.code === 'auth/email-already-in-use') {
       errorMessage = 'Email already registered';
     } else if (error.code === 'auth/weak-password') {
       errorMessage = 'Password should be at least 6 characters';
     } else if (error.code === 'auth/invalid-email') {
       errorMessage = 'Invalid email address';
+    } else {
+      errorMessage = error.message;
     }
+    
     return { success: false, error: errorMessage };
   }
 };
 
-// Login user
 export const loginUser = async (email, password) => {
   try {
+    console.log('🔵 Starting login for:', email);
+    
+    // Step 1: Authenticate with Firebase Auth
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
+    console.log('✅ Firebase Auth successful:', user.uid);
     
-    // Try to get owner data
-    const owners = await getAllFromFirestore('owners');
-    const owner = owners.find(o => o.userId === user.uid || o.email === email);
+    // Step 2: Get user data from Firestore using UID
+    const ownerDocRef = doc(db, 'owners', user.uid);
+    const ownerDoc = await getDoc(ownerDocRef);
     
-    if (owner) {
-      return { success: true, user: owner, role: 'owner' };
+    if (ownerDoc.exists()) {
+      console.log('✅ Owner data found in Firestore');
+      const ownerData = { id: user.uid, ...ownerDoc.data() };
+      return { success: true, user: ownerData, role: 'owner' };
     }
     
-    // Try to get agent data
+    console.log('🔵 Not an owner, checking agents...');
+    
+    // Step 3: Try to find in agents collection
     const agents = await getAllFromFirestore('agents');
     const agent = agents.find(a => a.email === email);
     
     if (agent) {
+      console.log('✅ Agent data found');
       return { success: true, user: agent, role: 'agent' };
     }
     
-    return { success: false, error: 'User data not found' };
+    console.error('❌ User authenticated but no data found in Firestore');
+    return { 
+      success: false, 
+      error: 'Account found but user data is missing. Please contact support.' 
+    };
+    
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('❌ Login error:', error);
     let errorMessage = 'Invalid email or password';
+    
     if (error.code === 'auth/user-not-found') {
       errorMessage = 'No account found with this email';
     } else if (error.code === 'auth/wrong-password') {
       errorMessage = 'Incorrect password';
     } else if (error.code === 'auth/invalid-email') {
       errorMessage = 'Invalid email address';
+    } else if (error.code === 'auth/too-many-requests') {
+      errorMessage = 'Too many failed attempts. Please try again later.';
+    } else {
+      errorMessage = error.message;
     }
+    
     return { success: false, error: errorMessage };
   }
 };
 
-// Logout user
 export const logoutUser = async () => {
   try {
     await signOut(auth);
@@ -224,7 +258,6 @@ export const logoutUser = async () => {
   }
 };
 
-// Auth state listener
 export const onAuthChange = (callback) => {
   return onAuthStateChanged(auth, callback);
 };
@@ -233,18 +266,18 @@ export const onAuthChange = (callback) => {
 // HELPER FUNCTIONS
 // ============================================================
 
-// Generate unique ID (fallback if Firebase auto-ID not used)
 export const generateId = () => {
   return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
 };
 
-// Seed initial demo data (run once on first load)
 export const seedDemoData = async (ownerId) => {
   try {
+    console.log('🔵 Seeding demo data for owner:', ownerId);
+    
     // Check if data already exists
     const villages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
     if (villages.length > 0) {
-      console.log('Demo data already exists');
+      console.log('✅ Demo data already exists');
       return { success: true, message: 'Data already exists' };
     }
     
@@ -274,10 +307,10 @@ export const seedDemoData = async (ownerId) => {
       price: 2800
     });
     
-    console.log('Demo data seeded successfully');
+    console.log('✅ Demo data seeded successfully');
     return { success: true, message: 'Demo data created' };
   } catch (error) {
-    console.error('Error seeding demo data:', error);
+    console.error('❌ Error seeding demo data:', error);
     return { success: false, error: error.message };
   }
 };
