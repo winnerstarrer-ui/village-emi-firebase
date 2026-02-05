@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, setDoc, getDoc, collection } from 'firebase/firestore';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBltf4ue-UxjmRNAYyxHFNXBtOe6bNyuI4",
@@ -20,18 +20,17 @@ export const registerUser = async (email, password, userData) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    const ownerData = {
+    // This is the specific part that fills the database
+    await setDoc(doc(db, 'owners', user.uid), {
       userId: user.uid,
       email: user.email,
       businessName: userData.businessName || '',
       ownerName: userData.ownerName || '',
       role: 'owner',
       createdAt: Date.now()
-    };
-
-    // This sends it to Firestore
-    await setDoc(doc(db, 'owners', user.uid), ownerData);
-    return { success: true, user: user };
+    });
+    
+    return { success: true, user };
   } catch (error) {
     console.error("Firebase Error:", error.message);
     return { success: false, error: error.message };
@@ -40,8 +39,8 @@ export const registerUser = async (email, password, userData) => {
 
 export const loginUser = async (email, password) => {
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return { success: true, user: userCredential.user };
+    const res = await signInWithEmailAndPassword(auth, email, password);
+    return { success: true, user: res.user };
   } catch (error) {
     return { success: false, error: error.message };
   }
