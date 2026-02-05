@@ -1,28 +1,14 @@
-// firebaseService.js - Fully Fixed & Production Ready
+// firebaseService.js - Cleaned & Fixed Version
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  query, 
-  where, 
-  onSnapshot,
-  setDoc,
-  getDoc
+  getFirestore, collection, addDoc, getDocs, updateDoc, 
+  deleteDoc, doc, query, where, onSnapshot, setDoc, getDoc 
 } from 'firebase/firestore';
 import { 
-  getAuth, 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, 
+  signOut, onAuthStateChanged 
 } from 'firebase/auth';
 
-// Firebase Configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBltf4ue-UxjmRNAYyxHFNXBtOe6bNyuI4",
   authDomain: "village-emi-manager.firebaseapp.com",
@@ -32,25 +18,20 @@ const firebaseConfig = {
   appId: "1:1011535673411:web:4d20038e67e4ffe33abcf6"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// ============================================================
-// AUTHENTICATION OPERATIONS
-// ============================================================
-
+// AUTH OPERATIONS
 export const registerUser = async (email, password, userData) => {
   try {
     console.log('🔵 Starting registration for:', email);
     
-    // 1. Create User in Firebase Auth
+    // 1. Create Auth account
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-    console.log('✅ Firebase Auth user created:', user.uid);
     
-    // 2. Prepare user data
+    // 2. Prepare data
     const ownerData = {
       userId: user.uid,
       email: user.email,
@@ -61,16 +42,14 @@ export const registerUser = async (email, password, userData) => {
       createdAt: Date.now()
     };
     
-    // 3. Save to Firestore (THIS SAVES THE DATA)
+    // 3. THE FIX: This sends the data to the "owners" collection
     await setDoc(doc(db, 'owners', user.uid), ownerData);
     console.log('✅ Successfully saved to Firestore');
 
     return { success: true, user: { id: user.uid, ...ownerData } };
   } catch (error) {
     console.error('❌ Registration error:', error);
-    let errorMessage = error.message;
-    if (error.code === 'auth/email-already-in-use') errorMessage = 'Email already registered';
-    return { success: false, error: errorMessage };
+    return { success: false, error: error.message };
   }
 };
 
@@ -78,12 +57,12 @@ export const loginUser = async (email, password) => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-    
     const ownerDoc = await getDoc(doc(db, 'owners', user.uid));
+    
     if (ownerDoc.exists()) {
       return { success: true, user: { id: user.uid, ...ownerDoc.data() }, role: 'owner' };
     }
-    return { success: true, user: { email: user.email, uid: user.uid }, role: 'unknown' };
+    return { success: true, user: { id: user.uid, email: user.email }, role: 'unknown' };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -92,10 +71,7 @@ export const loginUser = async (email, password) => {
 export const logoutUser = () => signOut(auth);
 export const onAuthChange = (callback) => onAuthStateChanged(auth, callback);
 
-// ============================================================
-// FIRESTORE CRUD OPERATIONS
-// ============================================================
-
+// CRUD OPERATIONS
 export const addToFirestore = async (collectionName, data) => {
   try {
     const docRef = await addDoc(collection(db, collectionName), {
@@ -110,34 +86,15 @@ export const addToFirestore = async (collectionName, data) => {
 };
 
 export const getAllFromFirestore = async (collectionName) => {
-  try {
-    const querySnapshot = await getDocs(collection(db, collectionName));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  } catch (error) {
-    return [];
-  }
-};
-
-export const updateInFirestore = async (collectionName, docId, data) => {
-  try {
-    const docRef = doc(db, collectionName, docId);
-    await updateDoc(docRef, { ...data, updatedAt: Date.now() });
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
+  const querySnapshot = await getDocs(collection(db, collectionName));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
 export const deleteFromFirestore = async (collectionName, docId) => {
-  try {
-    await deleteDoc(doc(db, collectionName, docId));
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
+  await deleteDoc(doc(db, collectionName, docId));
+  return { success: true };
 };
 
 export default {
-  db, auth, registerUser, loginUser, logoutUser, onAuthChange,
-  addToFirestore, getAllFromFirestore, updateInFirestore, deleteFromFirestore
+  db, auth, registerUser, loginUser, logoutUser, onAuthChange, addToFirestore, getAllFromFirestore, deleteFromFirestore
 };
