@@ -1,4 +1,4 @@
-// firebaseService.js - Firebase Integration Service
+// firebaseService.js - Cleaned & Corrected Version
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, 
@@ -38,6 +38,61 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 
 // ============================================================
+// AUTHENTICATION OPERATIONS
+// ============================================================
+
+export const registerUser = async (email, password, userData) => {
+  try {
+    console.log('🔵 Starting registration for:', email);
+    
+    // 1. Create Auth user
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    // 2. Prepare data
+    const ownerData = {
+      userId: user.uid,
+      email: user.email,
+      businessName: userData.businessName || '',
+      ownerName: userData.ownerName || '',
+      phone: userData.phone || '',
+      role: 'owner',
+      createdAt: Date.now()
+    };
+    
+    // 3. Save to Firestore (Creating the document)
+    await setDoc(doc(db, 'owners', user.uid), ownerData);
+    console.log('✅ User data saved to Firestore in owners collection');
+    
+    return { success: true, user: { id: user.uid, ...ownerData } };
+  } catch (error) {
+    console.error('❌ Registration error:', error);
+    let errorMessage = error.message;
+    if (error.code === 'auth/email-already-in-use') errorMessage = 'Email already registered';
+    return { success: false, error: errorMessage };
+  }
+};
+
+export const loginUser = async (email, password) => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    const ownerDoc = await getDoc(doc(db, 'owners', user.uid));
+    if (ownerDoc.exists()) {
+      return { success: true, user: { id: user.uid, ...ownerDoc.data() }, role: 'owner' };
+    }
+    return { success: false, error: 'User data not found.' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+export const logoutUser = () => signOut(auth);
+
+export const onAuthChange = (callback) => onAuthStateChanged(auth, callback);
+
+// ============================================================
 // FIRESTORE CRUD OPERATIONS
 // ============================================================
 
@@ -50,297 +105,42 @@ export const addToFirestore = async (collectionName, data) => {
     });
     return { success: true, id: docRef.id };
   } catch (error) {
-    console.error(`Error adding to ${collectionName}:`, error);
     return { success: false, error: error.message };
   }
 };
 
 export const getAllFromFirestore = async (collectionName) => {
-  try {
-    const querySnapshot = await getDocs(collection(db, collectionName));
-    const data = [];
-    querySnapshot.forEach((doc) => {
-      data.push({ id: doc.id, ...doc.data() });
-    });
-    return data;
-  } catch (error) {
-    console.error(`Error getting ${collectionName}:`, error);
-    return [];
-  }
+  const querySnapshot = await getDocs(collection(db, collectionName));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
 export const getFilteredFromFirestore = async (collectionName, field, operator, value) => {
-  try {
-    const q = query(collection(db, collectionName), where(field, operator, value));
-    const querySnapshot = await getDocs(q);
-    const data = [];
-    querySnapshot.forEach((doc) => {
-      data.push({ id: doc.id, ...doc.data() });
-    });
-    return data;
-  } catch (error) {
-    console.error(`Error filtering ${collectionName}:`, error);
-    return [];
-  }
+  const q = query(collection(db, collectionName), where(field, operator, value));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
 export const updateInFirestore = async (collectionName, docId, data) => {
-  try {
-    const docRef = doc(db, collectionName, docId);
-    await updateDoc(docRef, {
-      ...data,
-      updatedAt: Date.now()
-    });
-    return { success: true };
-  } catch (error) {
-    console.error(`Error updating ${collectionName}:`, error);
-    return { success: false, error: error.message };
-  }
+  const docRef = doc(db, collectionName, docId);
+  await updateDoc(docRef, { ...data, updatedAt: Date.now() });
+  return { success: true };
 };
 
 export const deleteFromFirestore = async (collectionName, docId) => {
-  try {
-    await deleteDoc(doc(db, collectionName, docId));
-    return { success: true };
-  } catch (error) {
-    console.error(`Error deleting from ${collectionName}:`, error);
-    return { success: false, error: error.message };
-  }
+  await deleteDoc(doc(db, collectionName, docId));
+  return { success: true };
 };
 
-export const listenToCollection = (collectionName, callback, filterField = null, filterValue = null) => {
-  try {
-    let q;
-    if (filterField && filterValue) {
-      q = query(collection(db, collectionName), where(filterField, '==', filterValue));
-    } else {
-      q = collection(db, collectionName);
-    }
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const data = [];
-      querySnapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() });
-      });
-      callback(data);
-    }, (error) => {
-      console.error(`Error listening to ${collectionName}:`, error);
-      callback([]);
-    });
-    
-    return unsubscribe;
-  } catch (error) {
-    console.error(`Error setting up listener for ${collectionName}:`, error);
-    return () => {};
-  }
+export const listenToCollection = (collectionName, callback) => {
+  return onSnapshot(collection(db, collectionName), (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+  });
 };
 
-// ============================================================
-// AUTHENTICATION OPERATIONS - FIXED VERSION
-// ============================================================
-
-export const registerUser = async (email, password, userData) => {
-  try {
-    console.log('🔵 Starting registration for:', email);
-    
-    // Step 1: Create Firebase Auth user
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    console.log('✅ Firebase Auth user created:', user.uid);
-    
-    // Step 2: Prepare user data
-    const ownerData = {
-      userId: user.uid,
-      email: user.email,
-      businessName: userData.businessName,
-      ownerName: userData.ownerName,
-      phone: userData.phone || '',
-      role: 'owner',
-      createdAt: Date.now()
-    };
-    
-    console.log('🔵 Saving to Firestore:', ownerData);
-
-    // 🔴 ADD THIS LINE BELOW 🔴
-    // This actually pushes the data to the "users" collection
-    await setDoc(doc(db, "users", user.uid), ownerData);
-    
-    console.log('✅ Successfully saved to Firestore');
-    return user;
-
-  } catch (error) {
-    console.error('❌ Registration error:', error);
-    throw error;
-  }
-};
-    
-    // Step 3: Save to Firestore using UID as document ID
-    await setDoc(doc(db, 'owners', user.uid), ownerData);
-    console.log('✅ User data saved to Firestore');
-    
-    // Step 4: Return user with ID
-    return { 
-      success: true, 
-      user: { 
-        id: user.uid, 
-        ...ownerData 
-      } 
-    };
-    
-  } catch (error) {
-    console.error('❌ Registration error:', error);
-    let errorMessage = 'Registration failed';
-    
-    if (error.code === 'auth/email-already-in-use') {
-      errorMessage = 'Email already registered';
-    } else if (error.code === 'auth/weak-password') {
-      errorMessage = 'Password should be at least 6 characters';
-    } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Invalid email address';
-    } else {
-      errorMessage = error.message;
-    }
-    
-    return { success: false, error: errorMessage };
-  }
-};
-
-export const loginUser = async (email, password) => {
-  try {
-    console.log('🔵 Starting login for:', email);
-    
-    // Step 1: Authenticate with Firebase Auth
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    console.log('✅ Firebase Auth successful:', user.uid);
-    
-    // Step 2: Get user data from Firestore using UID
-    const ownerDocRef = doc(db, 'owners', user.uid);
-    const ownerDoc = await getDoc(ownerDocRef);
-    
-    if (ownerDoc.exists()) {
-      console.log('✅ Owner data found in Firestore');
-      const ownerData = { id: user.uid, ...ownerDoc.data() };
-      return { success: true, user: ownerData, role: 'owner' };
-    }
-    
-    console.log('🔵 Not an owner, checking agents...');
-    
-    // Step 3: Try to find in agents collection
-    const agents = await getAllFromFirestore('agents');
-    const agent = agents.find(a => a.email === email);
-    
-    if (agent) {
-      console.log('✅ Agent data found');
-      return { success: true, user: agent, role: 'agent' };
-    }
-    
-    console.error('❌ User authenticated but no data found in Firestore');
-    return { 
-      success: false, 
-      error: 'Account found but user data is missing. Please contact support.' 
-    };
-    
-  } catch (error) {
-    console.error('❌ Login error:', error);
-    let errorMessage = 'Invalid email or password';
-    
-    if (error.code === 'auth/user-not-found') {
-      errorMessage = 'No account found with this email';
-    } else if (error.code === 'auth/wrong-password') {
-      errorMessage = 'Incorrect password';
-    } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Invalid email address';
-    } else if (error.code === 'auth/too-many-requests') {
-      errorMessage = 'Too many failed attempts. Please try again later.';
-    } else {
-      errorMessage = error.message;
-    }
-    
-    return { success: false, error: errorMessage };
-  }
-};
-
-export const logoutUser = async () => {
-  try {
-    await signOut(auth);
-    return { success: true };
-  } catch (error) {
-    console.error('Logout error:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const onAuthChange = (callback) => {
-  return onAuthStateChanged(auth, callback);
-};
-
-// ============================================================
-// HELPER FUNCTIONS
-// ============================================================
-
-export const generateId = () => {
-  return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-};
-
-export const seedDemoData = async (ownerId) => {
-  try {
-    console.log('🔵 Seeding demo data for owner:', ownerId);
-    
-    // Check if data already exists
-    const villages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
-    if (villages.length > 0) {
-      console.log('✅ Demo data already exists');
-      return { success: true, message: 'Data already exists' };
-    }
-    
-    // Add demo villages
-    await addToFirestore('villages', {
-      ownerId,
-      villageName: 'Rampur',
-      nextCustomerId: 805
-    });
-    
-    await addToFirestore('villages', {
-      ownerId,
-      villageName: 'Sundarabad',
-      nextCustomerId: 803
-    });
-    
-    // Add demo products
-    await addToFirestore('products', {
-      ownerId,
-      productName: 'Mixer Grinder',
-      price: 3500
-    });
-    
-    await addToFirestore('products', {
-      ownerId,
-      productName: 'Cooker (3L)',
-      price: 2800
-    });
-    
-    console.log('✅ Demo data seeded successfully');
-    return { success: true, message: 'Demo data created' };
-  } catch (error) {
-    console.error('❌ Error seeding demo data:', error);
-    return { success: false, error: error.message };
-  }
-};
+export const generateId = () => 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
 
 export default {
-  db,
-  auth,
-  addToFirestore,
-  getAllFromFirestore,
-  getFilteredFromFirestore,
-  updateInFirestore,
-  deleteFromFirestore,
-  listenToCollection,
-  registerUser,
-  loginUser,
-  logoutUser,
-  onAuthChange,
-  generateId,
-  seedDemoData
+  db, auth, addToFirestore, getAllFromFirestore, getFilteredFromFirestore,
+  updateInFirestore, deleteFromFirestore, listenToCollection,
+  registerUser, loginUser, logoutUser, onAuthChange, generateId
 };
