@@ -395,31 +395,64 @@ const LoginScreen = ({ onLogin }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [regData, setRegData] = useState({ businessName: '', ownerName: '', phone: '' });
 
-  const handleLogin = () => {
+ const handleLogin = async () => {
     setError('');
-    if (role === 'owner') {
-      if (isRegister) {
-        if (!email || !password || !regData.businessName || !regData.ownerName) { setError('Fill all fields'); return; }
-        const owners = getLS(STORAGE_KEYS.OWNERS) || [];
-        if (owners.find(o => o.email === email)) { setError('Email already registered'); return; }
-        const newOwner = { id: uid(), email, password: btoa(password), ...regData, role: 'owner' };
-        owners.push(newOwner);
-        setLS(STORAGE_KEYS.OWNERS, owners);
-        setLS(STORAGE_KEYS.CURRENT_USER, newOwner);
-        onLogin(newOwner);
-      } else {
-        const owners = getLS(STORAGE_KEYS.OWNERS) || [];
-        const found = owners.find(o => o.email === email && o.password === btoa(password));
-        if (!found) { setError('Invalid email or password'); return; }
-        setLS(STORAGE_KEYS.CURRENT_USER, found);
-        onLogin(found);
+    
+    // 1. PRE-SAVE LOCALLY (This ensures it works even if internet is dead)
+    let localUser = null;
+    if (role === 'owner' && isRegister) {
+      if (!email || !password || !regData.businessName || !regData.ownerName) { 
+        setError('Fill all fields'); return; 
       }
-    } else {
-      const agents = getLS(STORAGE_KEYS.AGENTS) || [];
-      const found = agents.find(a => a.email === email && a.password === btoa(password));
-      if (!found) { setError('Invalid email or password'); return; }
-      setLS(STORAGE_KEYS.CURRENT_USER, { ...found, role: 'agent' });
-      onLogin({ ...found, role: 'agent' });
+      const owners = getLS(STORAGE_KEYS.OWNERS) || [];
+      if (owners.find(o => o.email === email)) { setError('Email already registered'); return; }
+      
+      localUser = { id: uid(), email, password: btoa(password), ...regData, role: 'owner' };
+      owners.push(localUser);
+      setLS(STORAGE_KEYS.OWNERS, owners);
+      setLS(STORAGE_KEYS.CURRENT_USER, localUser);
+    }
+
+    // 2. TRY FIREBASE SYNC
+    try {
+      if (role === 'owner') {
+        if (isRegister) {
+          // Attempting to send to Cloud
+          const result = await FB.registerUser(email, password, regData);
+          if (result.success) {
+            onLogin({ ...result.user, role: 'owner', ...regData });
+          } else {
+            // If Firebase fails, we still let them in using the local data
+            console.warn("Cloud Sync Failed, using Offline Mode:", result.error);
+            onLogin(localUser);
+          }
+        } else {
+          // Login logic: Try Firebase first
+          const result = await FB.loginUser(email, password);
+          if (result.success) {
+            onLogin({ ...result.user, role: 'owner' });
+          } else {
+            // Fallback to Local Login if offline
+            const owners = getLS(STORAGE_KEYS.OWNERS) || [];
+            const found = owners.find(o => o.email === email && o.password === btoa(password));
+            if (found) onLogin(found);
+            else setError('Invalid credentials or no internet connection.');
+          }
+        }
+      } else {
+        // Agent login (Keeping your existing local-only logic for agents)
+        const agents = getLS(STORAGE_KEYS.AGENTS) || [];
+        const found = agents.find(a => a.email === email && a.password === btoa(password));
+        if (!found) { setError('Invalid email or password'); return; }
+        const agentUser = { ...found, role: 'agent' };
+        setLS(STORAGE_KEYS.CURRENT_USER, agentUser);
+        onLogin(agentUser);
+      }
+    } catch (err) {
+      // Emergency fallback if the whole block crashes
+      console.error("Critical Auth Error:", err);
+      if (localUser) onLogin(localUser);
+      else setError("System error. Check connection.");
     }
   };
 
