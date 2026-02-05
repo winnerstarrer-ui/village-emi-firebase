@@ -20,7 +20,7 @@ export const registerUser = async (email, password, userData) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    // This is the specific part that fills the database
+    // This creates the "owners" collection in your database
     await setDoc(doc(db, 'owners', user.uid), {
       userId: user.uid,
       email: user.email,
