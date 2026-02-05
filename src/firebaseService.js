@@ -148,7 +148,7 @@ export const registerUser = async (email, password, userData) => {
     const user = userCredential.user;
     console.log('✅ Firebase Auth user created:', user.uid);
     
-    // Step 2: Prepare user data for Firestore
+    // Step 2: Prepare user data
     const ownerData = {
       userId: user.uid,
       email: user.email,
@@ -160,6 +160,19 @@ export const registerUser = async (email, password, userData) => {
     };
     
     console.log('🔵 Saving to Firestore:', ownerData);
+
+    // 🔴 ADD THIS LINE BELOW 🔴
+    // This actually pushes the data to the "users" collection
+    await setDoc(doc(db, "users", user.uid), ownerData);
+    
+    console.log('✅ Successfully saved to Firestore');
+    return user;
+
+  } catch (error) {
+    console.error('❌ Registration error:', error);
+    throw error;
+  }
+};
     
     // Step 3: Save to Firestore using UID as document ID
     await setDoc(doc(db, 'owners', user.uid), ownerData);
