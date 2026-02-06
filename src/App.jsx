@@ -679,6 +679,7 @@ const VillageManagement = ({ user, onAddVillage }) => {
         villageName: form.villageName,
         nextCustomerId: Number(form.startingId) || 801
       };
+      console.log('Saving item:', nv);
       const result = await onAddVillage(nv);
       if (result.success) {
         showToast('Village added');
@@ -823,6 +824,7 @@ const AgentManagement = ({ user, onAddAgent }) => {
         assignedVillages: form.assignedVillages,
         role: 'agent'
       };
+      console.log('Saving item:', na);
       const result = await onAddAgent(na);
       if (result.success) {
         showToast('Agent added');
@@ -967,6 +969,7 @@ const ProductManagement = ({ user, onAddProduct }) => {
         productName: form.productName,
         price: Number(form.price)
       };
+      console.log('Saving item:', np);
       const result = await onAddProduct(np);
       if (result.success) {
         showToast('Product added');
