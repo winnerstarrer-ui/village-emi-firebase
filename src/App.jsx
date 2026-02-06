@@ -311,7 +311,7 @@ const seedData = async () => {
 
     // Mark as done so it doesn't run every time you refresh
     setLS('has_seeded_to_cloud', true);
-    showToast("Demo data synced to Firebase!");
+    console.log("Demo data synced to Firebase!");
   };
 
 // ============================================================
@@ -637,7 +637,7 @@ const OwnerDashboard = ({ user }) => {
 // ============================================================
 // VILLAGE MANAGEMENT
 // ============================================================
-const VillageManagement = ({ user }) => {
+const VillageManagement = ({ user, onAddVillage }) => {
   const [villages, setVillages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -679,7 +679,9 @@ const VillageManagement = ({ user }) => {
         villageName: form.villageName,
         nextCustomerId: Number(form.startingId) || 801
       };
-      const result = await FB.addToFirestore('villages', nv);
+      const result = onAddVillage
+        ? await onAddVillage(nv)
+        : await FB.addToFirestore('villages', nv);
       if (result.success) {
         showToast('Village added');
         const updated = await FB.getFilteredFromFirestore('villages', 'ownerId', '==', user.id);
@@ -762,7 +764,7 @@ const VillageManagement = ({ user }) => {
 // ============================================================
 // AGENT MANAGEMENT
 // ============================================================
-const AgentManagement = ({ user }) => {
+const AgentManagement = ({ user, onAddAgent }) => {
   const [agents, setAgents] = useState([]);
   const [villages, setVillages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -823,7 +825,9 @@ const AgentManagement = ({ user }) => {
         assignedVillages: form.assignedVillages,
         role: 'agent'
       };
-      const result = await FB.addToFirestore('agents', na);
+      const result = onAddAgent
+        ? await onAddAgent(na)
+        : await FB.addToFirestore('agents', na);
       if (result.success) {
         showToast('Agent added');
         const updated = await FB.getFilteredFromFirestore('agents', 'ownerId', '==', user.id);
@@ -928,7 +932,7 @@ const AgentManagement = ({ user }) => {
 // ============================================================
 // PRODUCT MANAGEMENT
 // ============================================================
-const ProductManagement = ({ user }) => {
+const ProductManagement = ({ user, onAddProduct }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -967,7 +971,9 @@ const ProductManagement = ({ user }) => {
         productName: form.productName,
         price: Number(form.price)
       };
-      const result = await FB.addToFirestore('products', np);
+      const result = onAddProduct
+        ? await onAddProduct(np)
+        : await FB.addToFirestore('products', np);
       if (result.success) {
         showToast('Product added');
         const updated = await FB.getFilteredFromFirestore('products', 'ownerId', '==', user.id);
@@ -2074,11 +2080,70 @@ const AgentHistory = ({ user }) => {
 // MAIN APP
 // ============================================================
 export default function App() {
+  const { toast, showToast } = useToast();
+
   // Seed demo data on mount
   useEffect(() => { seedData(); }, []);
 
   const [user, setUser] = useState(() => getLS(STORAGE_KEYS.CURRENT_USER));
   const [page, setPage] = useState('dashboard');
+
+  const handleAddVillage = async (village) => {
+    try {
+      const result = await FB.addToFirestore('villages', village);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to add village');
+      }
+      if (showToast) {
+        showToast('Village saved to cloud');
+      }
+      return result;
+    } catch (err) {
+      console.error('Error adding village:', err);
+      if (showToast) {
+        showToast('Failed to save village', 'error');
+      }
+      throw err;
+    }
+  };
+
+  const handleAddAgent = async (agent) => {
+    try {
+      const result = await FB.addToFirestore('agents', agent);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to add agent');
+      }
+      if (showToast) {
+        showToast('Agent saved to cloud');
+      }
+      return result;
+    } catch (err) {
+      console.error('Error adding agent:', err);
+      if (showToast) {
+        showToast('Failed to save agent', 'error');
+      }
+      throw err;
+    }
+  };
+
+  const handleAddProduct = async (product) => {
+    try {
+      const result = await FB.addToFirestore('products', product);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to add product');
+      }
+      if (showToast) {
+        showToast('Product saved to cloud');
+      }
+      return result;
+    } catch (err) {
+      console.error('Error adding product:', err);
+      if (showToast) {
+        showToast('Failed to save product', 'error');
+      }
+      throw err;
+    }
+  };
 
   const handleLogout = () => { setLS(STORAGE_KEYS.CURRENT_USER, null); setUser(null); setPage('dashboard'); };
 
@@ -2110,9 +2175,9 @@ export default function App() {
     if (isOwner) {
       switch (page) {
         case 'dashboard': return <OwnerDashboard user={user} />;
-        case 'villages': return <VillageManagement user={user} />;
-        case 'agents': return <AgentManagement user={user} />;
-        case 'products': return <ProductManagement user={user} />;
+        case 'villages': return <VillageManagement user={user} onAddVillage={handleAddVillage} />;
+        case 'agents': return <AgentManagement user={user} onAddAgent={handleAddAgent} />;
+        case 'products': return <ProductManagement user={user} onAddProduct={handleAddProduct} />;
         case 'sales': return <SalesEntry user={user} />;
         case 'customers': return <CustomerList user={user} />;
         case 'reports': return <Reports user={user} />;
