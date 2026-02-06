@@ -637,7 +637,8 @@ const OwnerDashboard = ({ user }) => {
 // ============================================================
 // VILLAGE MANAGEMENT
 // ============================================================
-const VillageManagement = ({ user, onAddVillage }) => {
+const VillageManagement = ({ user, onAddVillage, ...props }) => {
+  console.log("Component Received Prop:", !!onAddVillage);
   const [villages, setVillages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -680,13 +681,17 @@ const VillageManagement = ({ user, onAddVillage }) => {
         nextCustomerId: Number(form.startingId) || 801
       };
       console.log('Saving item:', nv);
-      const result = await onAddVillage(nv);
-      if (result.success) {
-        showToast('Village added');
-        const updated = await FB.getFilteredFromFirestore('villages', 'ownerId', '==', user.id);
-        setVillages(updated);
+      if (onAddVillage) {
+        const result = await onAddVillage(nv);
+        if (result.success) {
+          showToast('Village added');
+          const updated = await FB.getFilteredFromFirestore('villages', 'ownerId', '==', user.id);
+          setVillages(updated);
+        } else {
+          showToast('Failed to add', 'error');
+        }
       } else {
-        showToast('Failed to add', 'error');
+        console.error('onAddVillage prop is missing');
       }
     }
     setModalOpen(false);
@@ -825,13 +830,17 @@ const AgentManagement = ({ user, onAddAgent }) => {
         role: 'agent'
       };
       console.log('Saving item:', na);
-      const result = await onAddAgent(na);
-      if (result.success) {
-        showToast('Agent added');
-        const updated = await FB.getFilteredFromFirestore('agents', 'ownerId', '==', user.id);
-        setAgents(updated);
+      if (onAddAgent) {
+        const result = await onAddAgent(na);
+        if (result.success) {
+          showToast('Agent added');
+          const updated = await FB.getFilteredFromFirestore('agents', 'ownerId', '==', user.id);
+          setAgents(updated);
+        } else {
+          showToast('Failed to add', 'error');
+        }
       } else {
-        showToast('Failed to add', 'error');
+        console.error('onAddAgent prop is missing');
       }
     }
     setModalOpen(false);
@@ -970,13 +979,17 @@ const ProductManagement = ({ user, onAddProduct }) => {
         price: Number(form.price)
       };
       console.log('Saving item:', np);
-      const result = await onAddProduct(np);
-      if (result.success) {
-        showToast('Product added');
-        const updated = await FB.getFilteredFromFirestore('products', 'ownerId', '==', user.id);
-        setProducts(updated);
+      if (onAddProduct) {
+        const result = await onAddProduct(np);
+        if (result.success) {
+          showToast('Product added');
+          const updated = await FB.getFilteredFromFirestore('products', 'ownerId', '==', user.id);
+          setProducts(updated);
+        } else {
+          showToast('Failed to add', 'error');
+        }
       } else {
-        showToast('Failed to add', 'error');
+        console.error('onAddProduct prop is missing');
       }
     }
     setModalOpen(false);
