@@ -1,7 +1,29 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, setDoc } from 'firebase/firestore';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+// firebaseService.js - Firebase Integration Service
+// This file handles all Firebase operations
 
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  getDocs, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  query, 
+  where, 
+  onSnapshot,
+  setDoc 
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+
+// Firebase Configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBltf4ue-UxjmRNAYyxHFNXBtOe6bNyuI4",
   authDomain: "village-emi-manager.firebaseapp.com",
@@ -11,37 +33,269 @@ const firebaseConfig = {
   appId: "1:1011535673411:web:4d20038e67e4ffe33abcf6"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
+// ============================================================
+// FIRESTORE CRUD OPERATIONS
+// ============================================================
+
+// Add document to collection
+export const addToFirestore = async (collectionName, data) => {
+  try {
+    const docRef = await addDoc(collection(db, collectionName), {
+      ...data,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    return { success: true, id: docRef.id };
+  } catch (error) {
+    console.error(`Error adding to ${collectionName}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Get all documents from collection
+export const getAllFromFirestore = async (collectionName) => {
+  try {
+    const querySnapshot = await getDocs(collection(db, collectionName));
+    const data = [];
+    querySnapshot.forEach((doc) => {
+      data.push({ id: doc.id, ...doc.data() });
+    });
+    return data;
+  } catch (error) {
+    console.error(`Error getting ${collectionName}:`, error);
+    return [];
+  }
+};
+
+// Get documents with filter
+export const getFilteredFromFirestore = async (collectionName, field, operator, value) => {
+  try {
+    const q = query(collection(db, collectionName), where(field, operator, value));
+    const querySnapshot = await getDocs(q);
+    const data = [];
+    querySnapshot.forEach((doc) => {
+      data.push({ id: doc.id, ...doc.data() });
+    });
+    return data;
+  } catch (error) {
+    console.error(`Error filtering ${collectionName}:`, error);
+    return [];
+  }
+};
+
+// Update document
+export const updateInFirestore = async (collectionName, docId, data) => {
+  try {
+    const docRef = doc(db, collectionName, docId);
+    await updateDoc(docRef, {
+      ...data,
+      updatedAt: Date.now()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error(`Error updating ${collectionName}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Delete document
+export const deleteFromFirestore = async (collectionName, docId) => {
+  try {
+    await deleteDoc(doc(db, collectionName, docId));
+    return { success: true };
+  } catch (error) {
+    console.error(`Error deleting from ${collectionName}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Real-time listener for collection
+export const listenToCollection = (collectionName, callback, filterField = null, filterValue = null) => {
+  try {
+    let q;
+    if (filterField && filterValue) {
+      q = query(collection(db, collectionName), where(filterField, '==', filterValue));
+    } else {
+      q = collection(db, collectionName);
+    }
+    
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const data = [];
+      querySnapshot.forEach((doc) => {
+        data.push({ id: doc.id, ...doc.data() });
+      });
+      callback(data);
+    }, (error) => {
+      console.error(`Error listening to ${collectionName}:`, error);
+      callback([]);
+    });
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error(`Error setting up listener for ${collectionName}:`, error);
+    return () => {};
+  }
+};
+
+// ============================================================
+// AUTHENTICATION OPERATIONS
+// ============================================================
+
+// Register new user
 export const registerUser = async (email, password, userData) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    // This creates the "owners" collection in your database
-    await setDoc(doc(db, 'owners', user.uid), {
+    // Save user data to Firestore
+    const ownerData = {
       userId: user.uid,
       email: user.email,
-      businessName: userData.businessName || '',
-      ownerName: userData.ownerName || '',
-      role: 'owner',
+      ...userData,
       createdAt: Date.now()
-    });
+    };
     
-    return { success: true, user };
+    await setDoc(doc(db, 'owners', user.uid), ownerData);
+    
+    return { success: true, user: { id: user.uid, ...ownerData } };
   } catch (error) {
-    console.error("Firebase Error:", error.message);
+    console.error('Registration error:', error);
+    let errorMessage = 'Registration failed';
+    if (error.code === 'auth/email-already-in-use') {
+      errorMessage = 'Email already registered';
+    } else if (error.code === 'auth/weak-password') {
+      errorMessage = 'Password should be at least 6 characters';
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = 'Invalid email address';
+    }
+    return { success: false, error: errorMessage };
+  }
+};
+
+// Login user
+export const loginUser = async (email, password) => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    // Try to get owner data
+    const owners = await getAllFromFirestore('owners');
+    const owner = owners.find(o => o.userId === user.uid || o.email === email);
+    
+    if (owner) {
+      return { success: true, user: owner, role: 'owner' };
+    }
+    
+    // Try to get agent data
+    const agents = await getAllFromFirestore('agents');
+    const agent = agents.find(a => a.email === email);
+    
+    if (agent) {
+      return { success: true, user: agent, role: 'agent' };
+    }
+    
+    return { success: false, error: 'User data not found' };
+  } catch (error) {
+    console.error('Login error:', error);
+    let errorMessage = 'Invalid email or password';
+    if (error.code === 'auth/user-not-found') {
+      errorMessage = 'No account found with this email';
+    } else if (error.code === 'auth/wrong-password') {
+      errorMessage = 'Incorrect password';
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = 'Invalid email address';
+    }
+    return { success: false, error: errorMessage };
+  }
+};
+
+// Logout user
+export const logoutUser = async () => {
+  try {
+    await signOut(auth);
+    return { success: true };
+  } catch (error) {
+    console.error('Logout error:', error);
     return { success: false, error: error.message };
   }
 };
 
-export const loginUser = async (email, password) => {
+// Auth state listener
+export const onAuthChange = (callback) => {
+  return onAuthStateChanged(auth, callback);
+};
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
+// Generate unique ID (fallback if Firebase auto-ID not used)
+export const generateId = () => {
+  return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+};
+
+// Seed initial demo data (run once on first load)
+export const seedDemoData = async (ownerId) => {
   try {
-    const res = await signInWithEmailAndPassword(auth, email, password);
-    return { success: true, user: res.user };
+    // Check if data already exists
+    const villages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
+    if (villages.length > 0) {
+      console.log('Demo data already exists');
+      return { success: true, message: 'Data already exists' };
+    }
+    
+    // Add demo villages
+    await addToFirestore('villages', {
+      ownerId,
+      villageName: 'Rampur',
+      nextCustomerId: 805
+    });
+    
+    await addToFirestore('villages', {
+      ownerId,
+      villageName: 'Sundarabad',
+      nextCustomerId: 803
+    });
+    
+    // Add demo products
+    await addToFirestore('products', {
+      ownerId,
+      productName: 'Mixer Grinder',
+      price: 3500
+    });
+    
+    await addToFirestore('products', {
+      ownerId,
+      productName: 'Cooker (3L)',
+      price: 2800
+    });
+    
+    console.log('Demo data seeded successfully');
+    return { success: true, message: 'Demo data created' };
   } catch (error) {
+    console.error('Error seeding demo data:', error);
     return { success: false, error: error.message };
   }
+};
+
+export default {
+  db,
+  auth,
+  addToFirestore,
+  getAllFromFirestore,
+  getFilteredFromFirestore,
+  updateInFirestore,
+  deleteFromFirestore,
+  listenToCollection,
+  registerUser,
+  loginUser,
+  logoutUser,
+  onAuthChange,
+  generateId,
+  seedDemoData
 };
