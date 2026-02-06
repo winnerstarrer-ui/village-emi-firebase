@@ -45,7 +45,24 @@ export const loginUser = async (email, password) => {
     return { success: false, error: error.message };
   }
 };
-// --- ADD THIS TO THE BOTTOM OF firebaseService.js ---
+
+// Generic function to add/update documents to any collection
+export const addToFirestore = async (collection, data) => {
+  try {
+    if (!data.id) {
+      return { success: false, error: 'Data must have an id field' };
+    }
+    
+    await setDoc(doc(db, collection, data.id), {
+      ...data,
+      syncedAt: Date.now()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error(`Error saving to ${collection}:`, error);
+    return { success: false, error: error.message };
+  }
+};
 
 // Tool to save a Village
 export const saveVillageToCloud = async (villageData, ownerId) => {
@@ -58,7 +75,7 @@ export const saveVillageToCloud = async (villageData, ownerId) => {
     return { success: true };
   } catch (error) {
     console.error("Cloud Error saving village:", error);
-    return { success: false, error };
+    return { success: false, error: error.message };
   }
 };
 
@@ -73,7 +90,7 @@ export const saveAgentToCloud = async (agentData, ownerId) => {
     return { success: true };
   } catch (error) {
     console.error("Cloud Error saving agent:", error);
-    return { success: false, error };
+    return { success: false, error: error.message };
   }
 };
 
@@ -88,6 +105,6 @@ export const saveProductToCloud = async (productData, ownerId) => {
     return { success: true };
   } catch (error) {
     console.error("Cloud Error saving product:", error);
-    return { success: false, error };
+    return { success: false, error: error.message };
   }
 };
