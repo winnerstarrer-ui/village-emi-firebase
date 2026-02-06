@@ -244,14 +244,38 @@ const STORAGE_KEYS = {
   PAYMENTS: 'emi_payments',
 };
 
-// In-memory store (persists across re-renders, resets on page refresh)
+// Persistent localStorage (data survives page refresh)
 const _memStore = {};
 const getLS = (key) => {
-  const v = _memStore[key];
-  return v !== undefined ? JSON.parse(JSON.stringify(v)) : null;
+  // Check memory cache first
+  if (_memStore[key]) return _memStore[key];
+  
+  // Try browser localStorage
+  const stored = localStorage.getItem(key);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      _memStore[key] = parsed;
+      return parsed;
+    } catch (e) {
+      console.error('Error parsing localStorage:', e);
+      return null;
+    }
+  }
+  return null;
 };
-const setLS = (key, val) => { _memStore[key] = JSON.parse(JSON.stringify(val)); };
 
+const setLS = (key, val) => {
+  // Save to memory cache
+  _memStore[key] = val;
+  
+  // Also save to browser localStorage for persistence
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+  } catch (e) {
+    console.error('Error saving to localStorage:', e);
+  }
+};
 // Seed demo data
 const seedData = async () => {
     // This stops it from creating duplicates
