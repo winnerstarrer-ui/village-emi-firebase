@@ -679,9 +679,7 @@ const VillageManagement = ({ user, onAddVillage }) => {
         villageName: form.villageName,
         nextCustomerId: Number(form.startingId) || 801
       };
-      const result = onAddVillage
-        ? await onAddVillage(nv)
-        : await FB.addToFirestore('villages', nv);
+      const result = await onAddVillage(nv);
       if (result.success) {
         showToast('Village added');
         const updated = await FB.getFilteredFromFirestore('villages', 'ownerId', '==', user.id);
@@ -825,9 +823,7 @@ const AgentManagement = ({ user, onAddAgent }) => {
         assignedVillages: form.assignedVillages,
         role: 'agent'
       };
-      const result = onAddAgent
-        ? await onAddAgent(na)
-        : await FB.addToFirestore('agents', na);
+      const result = await onAddAgent(na);
       if (result.success) {
         showToast('Agent added');
         const updated = await FB.getFilteredFromFirestore('agents', 'ownerId', '==', user.id);
@@ -971,9 +967,7 @@ const ProductManagement = ({ user, onAddProduct }) => {
         productName: form.productName,
         price: Number(form.price)
       };
-      const result = onAddProduct
-        ? await onAddProduct(np)
-        : await FB.addToFirestore('products', np);
+      const result = await onAddProduct(np);
       if (result.success) {
         showToast('Product added');
         const updated = await FB.getFilteredFromFirestore('products', 'ownerId', '==', user.id);
