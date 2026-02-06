@@ -638,36 +638,70 @@ const OwnerDashboard = ({ user }) => {
 // VILLAGE MANAGEMENT
 // ============================================================
 const VillageManagement = ({ user }) => {
-  const [villages, setVillages] = useState((getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.ownerId === user.id));
+  const [villages, setVillages] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editVillage, setEditVillage] = useState(null);
   const [form, setForm] = useState({ villageName: '', startingId: 801 });
   const { toast, showToast } = useToast();
 
-  const save = () => {
+  useEffect(() => {
+    const loadVillages = async () => {
+      setLoading(true);
+      const data = await FB.getFilteredFromFirestore('villages', 'ownerId', '==', user.id);
+      setVillages(data);
+      setLoading(false);
+    };
+    loadVillages();
+  }, [user.id]);
+
+  const save = async () => {
     if (!form.villageName.trim()) { showToast('Enter village name', 'error'); return; }
-    let all = getLS(STORAGE_KEYS.VILLAGES) || [];
+    
     if (editVillage) {
-      all = all.map(v => v.id === editVillage.id ? { ...v, villageName: form.villageName } : v);
-      showToast('Village updated');
+      const result = await FB.updateInFirestore('villages', editVillage.id, {
+        villageName: form.villageName
+      });
+      if (result.success) {
+        showToast('Village updated');
+        const updated = await FB.getFilteredFromFirestore('villages', 'ownerId', '==', user.id);
+        setVillages(updated);
+      } else {
+        showToast('Failed to update', 'error');
+      }
     } else {
-      if (villages.find(v => v.villageName.toLowerCase() === form.villageName.toLowerCase())) { showToast('Village name already exists', 'error'); return; }
-      const nv = { id: uid(), ownerId: user.id, villageName: form.villageName, nextCustomerId: Number(form.startingId) || 801 };
-      all.push(nv);
-      showToast('Village added');
+      if (villages.find(v => v.villageName.toLowerCase() === form.villageName.toLowerCase())) {
+        showToast('Village name already exists', 'error');
+        return;
+      }
+      const nv = {
+        ownerId: user.id,
+        villageName: form.villageName,
+        nextCustomerId: Number(form.startingId) || 801
+      };
+      const result = await FB.addToFirestore('villages', nv);
+      if (result.success) {
+        showToast('Village added');
+        const updated = await FB.getFilteredFromFirestore('villages', 'ownerId', '==', user.id);
+        setVillages(updated);
+      } else {
+        showToast('Failed to add', 'error');
+      }
     }
-    setLS(STORAGE_KEYS.VILLAGES, all);
-    setVillages(all.filter(v => v.ownerId === user.id));
     setModalOpen(false);
     setEditVillage(null);
     setForm({ villageName: '', startingId: 801 });
   };
 
-  const del = (id) => {
-    const all = (getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.id !== id);
-    setLS(STORAGE_KEYS.VILLAGES, all);
-    setVillages(all.filter(v => v.ownerId === user.id));
-    showToast('Village deleted');
+  const del = async (id) => {
+    const result = await FB.deleteFromFirestore('villages', id);
+    if (result.success) {
+      showToast('Village deleted');
+      const updated = await FB.getFilteredFromFirestore('villages', 'ownerId', '==', user.id);
+      setVillages(updated);
+    } else {
+      showToast('Failed to delete', 'error');
+    }
   };
 
   return (
@@ -729,12 +763,27 @@ const VillageManagement = ({ user }) => {
 // AGENT MANAGEMENT
 // ============================================================
 const AgentManagement = ({ user }) => {
-  const [agents, setAgents] = useState((getLS(STORAGE_KEYS.AGENTS) || []).filter(a => a.ownerId === user.id));
-  const villages = (getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.ownerId === user.id);
+  const [agents, setAgents] = useState([]);
+  const [villages, setVillages] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editAgent, setEditAgent] = useState(null);
   const [form, setForm] = useState({ agentName: '', email: '', password: '', phone: '', assignedVillages: [] });
   const { toast, showToast } = useToast();
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      const [agentsData, villagesData] = await Promise.all([
+        FB.getFilteredFromFirestore('agents', 'ownerId', '==', user.id),
+        FB.getFilteredFromFirestore('villages', 'ownerId', '==', user.id)
+      ]);
+      setAgents(agentsData);
+      setVillages(villagesData);
+      setLoading(false);
+    };
+    loadData();
+  }, [user.id]);
 
   const toggleVillage = (vid) => {
     setForm(p => ({
@@ -743,30 +792,60 @@ const AgentManagement = ({ user }) => {
     }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.agentName.trim() || !form.email.trim()) { showToast('Fill required fields', 'error'); return; }
-    let all = getLS(STORAGE_KEYS.AGENTS) || [];
+    
     if (editAgent) {
-      all = all.map(a => a.id === editAgent.id ? { ...a, agentName: form.agentName, phone: form.phone, assignedVillages: form.assignedVillages } : a);
-      showToast('Agent updated');
+      const result = await FB.updateInFirestore('agents', editAgent.id, {
+        agentName: form.agentName,
+        phone: form.phone || '',
+        assignedVillages: form.assignedVillages
+      });
+      if (result.success) {
+        showToast('Agent updated');
+        const updated = await FB.getFilteredFromFirestore('agents', 'ownerId', '==', user.id);
+        setAgents(updated);
+      } else {
+        showToast('Failed to update', 'error');
+      }
     } else {
       if (!form.password) { showToast('Set a password', 'error'); return; }
-      if (all.find(a => a.email === form.email)) { showToast('Email already exists', 'error'); return; }
-      all.push({ id: uid(), ownerId: user.id, agentName: form.agentName, email: form.email, password: btoa(form.password), phone: form.phone, assignedVillages: form.assignedVillages, role: 'agent' });
-      showToast('Agent added');
+      if (agents.find(a => a.email.toLowerCase() === form.email.toLowerCase())) {
+        showToast('Email already exists', 'error');
+        return;
+      }
+      const na = {
+        ownerId: user.id,
+        agentName: form.agentName,
+        email: form.email,
+        password: btoa(form.password),
+        phone: form.phone || '',
+        assignedVillages: form.assignedVillages,
+        role: 'agent'
+      };
+      const result = await FB.addToFirestore('agents', na);
+      if (result.success) {
+        showToast('Agent added');
+        const updated = await FB.getFilteredFromFirestore('agents', 'ownerId', '==', user.id);
+        setAgents(updated);
+      } else {
+        showToast('Failed to add', 'error');
+      }
     }
-    setLS(STORAGE_KEYS.AGENTS, all);
-    setAgents(all.filter(a => a.ownerId === user.id));
     setModalOpen(false);
     setEditAgent(null);
     setForm({ agentName: '', email: '', password: '', phone: '', assignedVillages: [] });
   };
 
-  const del = (id) => {
-    const all = (getLS(STORAGE_KEYS.AGENTS) || []).filter(a => a.id !== id);
-    setLS(STORAGE_KEYS.AGENTS, all);
-    setAgents(all.filter(a => a.ownerId === user.id));
-    showToast('Agent deleted');
+  const del = async (id) => {
+    const result = await FB.deleteFromFirestore('agents', id);
+    if (result.success) {
+      showToast('Agent deleted');
+      const updated = await FB.getFilteredFromFirestore('agents', 'ownerId', '==', user.id);
+      setAgents(updated);
+    } else {
+      showToast('Failed to delete', 'error');
+    }
   };
 
   return (
@@ -850,34 +929,67 @@ const AgentManagement = ({ user }) => {
 // PRODUCT MANAGEMENT
 // ============================================================
 const ProductManagement = ({ user }) => {
-  const [products, setProducts] = useState((getLS(STORAGE_KEYS.PRODUCTS) || []).filter(p => p.ownerId === user.id));
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
   const [form, setForm] = useState({ productName: '', price: '' });
   const { toast, showToast } = useToast();
 
-  const save = () => {
+  useEffect(() => {
+    const loadProducts = async () => {
+      setLoading(true);
+      const data = await FB.getFilteredFromFirestore('products', 'ownerId', '==', user.id);
+      setProducts(data);
+      setLoading(false);
+    };
+    loadProducts();
+  }, [user.id]);
+
+  const save = async () => {
     if (!form.productName.trim() || !form.price) { showToast('Fill all fields', 'error'); return; }
-    let all = getLS(STORAGE_KEYS.PRODUCTS) || [];
+    
     if (editProduct) {
-      all = all.map(p => p.id === editProduct.id ? { ...p, productName: form.productName, price: Number(form.price) } : p);
-      showToast('Product updated');
+      const result = await FB.updateInFirestore('products', editProduct.id, {
+        productName: form.productName,
+        price: Number(form.price)
+      });
+      if (result.success) {
+        showToast('Product updated');
+        const updated = await FB.getFilteredFromFirestore('products', 'ownerId', '==', user.id);
+        setProducts(updated);
+      } else {
+        showToast('Failed to update', 'error');
+      }
     } else {
-      all.push({ id: uid(), ownerId: user.id, productName: form.productName, price: Number(form.price) });
-      showToast('Product added');
+      const np = {
+        ownerId: user.id,
+        productName: form.productName,
+        price: Number(form.price)
+      };
+      const result = await FB.addToFirestore('products', np);
+      if (result.success) {
+        showToast('Product added');
+        const updated = await FB.getFilteredFromFirestore('products', 'ownerId', '==', user.id);
+        setProducts(updated);
+      } else {
+        showToast('Failed to add', 'error');
+      }
     }
-    setLS(STORAGE_KEYS.PRODUCTS, all);
-    setProducts(all.filter(p => p.ownerId === user.id));
     setModalOpen(false);
     setEditProduct(null);
     setForm({ productName: '', price: '' });
   };
 
-  const del = (id) => {
-    const all = (getLS(STORAGE_KEYS.PRODUCTS) || []).filter(p => p.id !== id);
-    setLS(STORAGE_KEYS.PRODUCTS, all);
-    setProducts(all.filter(p => p.ownerId === user.id));
-    showToast('Product deleted');
+  const del = async (id) => {
+    const result = await FB.deleteFromFirestore('products', id);
+    if (result.success) {
+      showToast('Product deleted');
+      const updated = await FB.getFilteredFromFirestore('products', 'ownerId', '==', user.id);
+      setProducts(updated);
+    } else {
+      showToast('Failed to delete', 'error');
+    }
   };
 
   return (
