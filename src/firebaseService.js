@@ -1,5 +1,5 @@
 // firebaseService.js - Complete Firebase Integration
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, deleteApp } from "firebase/app";
 import { 
   getFirestore, 
   collection, 
@@ -326,6 +326,41 @@ export const seedDemoData = async (ownerId) => {
   }
 };
 
+export const registerAgentWithAuth = async (ownerId, agentName, email, password, phone, assignedVillages) => {
+  try {
+    let secondaryApp;
+    try {
+      secondaryApp = getApps().find(a => a.name === 'secondary') || initializeApp(firebaseConfig, 'secondary');
+    } catch (_) {
+      secondaryApp = initializeApp(firebaseConfig, 'secondary');
+    }
+    const tempAuth = getAuth(secondaryApp);
+    const cred = await createUserWithEmailAndPassword(tempAuth, email, password);
+    const agentUid = cred.user.uid;
+    const agentData = {
+      id: agentUid,
+      ownerId,
+      agentName,
+      email,
+      phone: phone || '',
+      assignedVillages: assignedVillages || [],
+      role: 'agent',
+      createdAt: Date.now()
+    };
+    await setDoc(doc(db, 'agents', agentUid), agentData);
+    try { await signOut(tempAuth); } catch (_) {}
+    try { await deleteApp(secondaryApp); } catch (_) {}
+    return { success: true, agent: agentData };
+  } catch (error) {
+    if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
+      console.error('❌ Permission Denied during agent registration:', error);
+    } else {
+      console.error('❌ Agent registration error:', error);
+    }
+    return { success: false, error: error.message };
+  }
+};
+
 export default {
   db,
   auth,
@@ -340,5 +375,6 @@ export default {
   logoutUser,
   onAuthChange,
   generateId,
-  seedDemoData
+  seedDemoData,
+  registerAgentWithAuth
 };

@@ -680,7 +680,7 @@ const AgentManagement = ({ user }) => {
     }));
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.agentName.trim() || !form.email.trim()) { showToast('Fill required fields', 'error'); return; }
     let all = getLS(STORAGE_KEYS.AGENTS) || [];
     if (editAgent) {
@@ -689,9 +689,9 @@ const AgentManagement = ({ user }) => {
     } else {
       if (!form.password) { showToast('Set a password', 'error'); return; }
       if (all.find(a => a.email === form.email)) { showToast('Email already exists', 'error'); return; }
-      const na = { id: uid(), ownerId: user.id, agentName: form.agentName, email: form.email, password: btoa(form.password), phone: form.phone, assignedVillages: form.assignedVillages, role: 'agent' };
-      all.push(na);
-      FB.addToFirestore('agents', na);
+      const res = await FB.registerAgentWithAuth(user.id, form.agentName, form.email, form.password, form.phone, form.assignedVillages);
+      if (!res.success) { showToast(res.error || 'Agent creation failed', 'error'); return; }
+      const na = res.agent; all.push(na); FB.addToFirestore('agents', na);
       showToast('Agent added');
     }
     setLS(STORAGE_KEYS.AGENTS, all);
