@@ -368,8 +368,8 @@ const LoginScreen = ({ onLogin }) => {
           FB.getFilteredFromFirestore('products','ownerId','==',ownerUser.id),
           FB.getFilteredFromFirestore('agents','ownerId','==',ownerUser.id)
         ]);
-        setLS(STORAGE_KEYS.VILLAGES, vs);
-        setLS(STORAGE_KEYS.PRODUCTS, ps);
+        setLS(STORAGE_KEYS.VILLAGES, vs.map(v => ({ id: v.id, ...v })));
+        setLS(STORAGE_KEYS.PRODUCTS, ps.map(p => ({ id: p.id, ...p })));
       setLS(STORAGE_KEYS.AGENTS, as.map(a => ({ id: a.id, ...a })));
         onLogin(ownerUser);
         await FB.seedDemoData(res.user.id);
@@ -391,8 +391,8 @@ const LoginScreen = ({ onLogin }) => {
         FB.getFilteredFromFirestore('products','ownerId','==',userWithRole.id),
         FB.getFilteredFromFirestore('agents','ownerId','==',userWithRole.id)
       ]);
-      setLS(STORAGE_KEYS.VILLAGES, vs);
-      setLS(STORAGE_KEYS.PRODUCTS, ps);
+      setLS(STORAGE_KEYS.VILLAGES, vs.map(v => ({ id: v.id, ...v })));
+      setLS(STORAGE_KEYS.PRODUCTS, ps.map(p => ({ id: p.id, ...p })));
       setLS(STORAGE_KEYS.AGENTS, as.map(a => ({ id: a.id, ...a })));
       onLogin(userWithRole);
       if ((userWithRole.role || '') === 'owner') await FB.seedDemoData(userWithRole.id);
@@ -1940,9 +1940,9 @@ export default function App() {
         FB.getFilteredFromFirestore('products','ownerId','==',user.id),
         FB.getFilteredFromFirestore('agents','ownerId','==',user.id)
       ]);
-      setLS(STORAGE_KEYS.VILLAGES, vs);
-      setLS(STORAGE_KEYS.PRODUCTS, ps);
-      setLS(STORAGE_KEYS.AGENTS, as);
+      setLS(STORAGE_KEYS.VILLAGES, vs.map(v => ({ id: v.id, ...v })));
+      setLS(STORAGE_KEYS.PRODUCTS, ps.map(p => ({ id: p.id, ...p })));
+      setLS(STORAGE_KEYS.AGENTS, as.map(a => ({ id: a.id, ...a })));
     })();
   }, [user && user.id]);
 
