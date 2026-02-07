@@ -362,7 +362,7 @@ const LoginScreen = ({ onLogin }) => {
         const res = await FB.registerUser(email, password, regData);
         if (!res.success) { setError(res.error || 'Registration failed'); return; }
         const ownerUser = { ...res.user, role: 'owner' };
-        setLS(STORAGE_KEYS.CURRENT_USER, ownerUser);
+      setLS(STORAGE_KEYS.CURRENT_USER, ownerUser);
         const [vs, ps, as] = await Promise.all([
           FB.getFilteredFromFirestore('villages','ownerId','==',ownerUser.id),
           FB.getFilteredFromFirestore('products','ownerId','==',ownerUser.id),
@@ -370,7 +370,7 @@ const LoginScreen = ({ onLogin }) => {
         ]);
         setLS(STORAGE_KEYS.VILLAGES, vs);
         setLS(STORAGE_KEYS.PRODUCTS, ps);
-        setLS(STORAGE_KEYS.AGENTS, as);
+      setLS(STORAGE_KEYS.AGENTS, as.map(a => ({ id: a.id, ...a })));
         onLogin(ownerUser);
         await FB.seedDemoData(res.user.id);
       } catch (e) {
@@ -393,7 +393,7 @@ const LoginScreen = ({ onLogin }) => {
       ]);
       setLS(STORAGE_KEYS.VILLAGES, vs);
       setLS(STORAGE_KEYS.PRODUCTS, ps);
-      setLS(STORAGE_KEYS.AGENTS, as);
+      setLS(STORAGE_KEYS.AGENTS, as.map(a => ({ id: a.id, ...a })));
       onLogin(userWithRole);
       if ((userWithRole.role || '') === 'owner') await FB.seedDemoData(userWithRole.id);
     } catch (e) {
@@ -721,6 +721,7 @@ const AgentManagement = ({ user }) => {
   };
 
   const del = async (id) => {
+    console.log('Deleting agent with ID:', id);
     const res = await FB.deleteFromFirestore('agents', id);
     if (!res.success) { showToast(res.error || 'Delete failed', 'error'); return; }
     const all = (getLS(STORAGE_KEYS.AGENTS) || []).filter(a => a.id !== id);
@@ -2046,7 +2047,6 @@ export default function App() {
     </>
   );
 }
-// pad
 // pad
 // pad
 // pad
