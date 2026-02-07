@@ -351,25 +351,33 @@ const LoginScreen = ({ onLogin }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [regData, setRegData] = useState({ businessName: '', ownerName: '', phone: '' });
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setError('');
     if (role === 'owner' && isRegister) {
       if (!email || !password || !regData.businessName || !regData.ownerName) { setError('Fill all fields'); return; }
-      FB.registerUser(email, password, regData).then(res => {
+      try {
+        const res = await FB.registerUser(email, password, regData);
         if (!res.success) { setError(res.error || 'Registration failed'); return; }
         setLS(STORAGE_KEYS.CURRENT_USER, { ...res.user, role: 'owner' });
         onLogin({ ...res.user, role: 'owner' });
-        FB.seedDemoData(res.user.id);
-      }).catch(() => setError('Registration failed'));
+        await FB.seedDemoData(res.user.id);
+      } catch (e) {
+        console.error('Registration flow error:', e);
+        setError((e && e.message) || 'Registration failed');
+      }
       return;
     }
-    FB.loginUser(email, password).then(res => {
+    try {
+      const res = await FB.loginUser(email, password);
       if (!res.success) { setError(res.error || 'Invalid email or password'); return; }
       const userWithRole = { ...res.user, role: res.role || role };
       setLS(STORAGE_KEYS.CURRENT_USER, userWithRole);
       onLogin(userWithRole);
-      if ((userWithRole.role || '') === 'owner') FB.seedDemoData(userWithRole.id);
-    }).catch(() => setError('Invalid email or password'));
+      if ((userWithRole.role || '') === 'owner') await FB.seedDemoData(userWithRole.id);
+    } catch (e) {
+      console.error('Login flow error:', e);
+      setError((e && e.message) || 'Invalid email or password');
+    }
   };
 
   return (

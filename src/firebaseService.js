@@ -50,7 +50,11 @@ export const addToFirestore = async (collectionName, data) => {
     });
     return { success: true, id: docRef.id };
   } catch (error) {
-    console.error(`Error adding to ${collectionName}:`, error);
+    if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
+      console.error(`❌ Permission Denied while adding to ${collectionName}:`, error);
+    } else {
+      console.error(`Error adding to ${collectionName}:`, error);
+    }
     return { success: false, error: error.message };
   }
 };
@@ -93,7 +97,11 @@ export const updateInFirestore = async (collectionName, docId, data) => {
     });
     return { success: true };
   } catch (error) {
-    console.error(`Error updating ${collectionName}:`, error);
+    if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
+      console.error(`❌ Permission Denied while updating ${collectionName}:`, error);
+    } else {
+      console.error(`Error updating ${collectionName}:`, error);
+    }
     return { success: false, error: error.message };
   }
 };
@@ -103,7 +111,11 @@ export const deleteFromFirestore = async (collectionName, docId) => {
     await deleteDoc(doc(db, collectionName, docId));
     return { success: true };
   } catch (error) {
-    console.error(`Error deleting from ${collectionName}:`, error);
+    if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
+      console.error(`❌ Permission Denied while deleting from ${collectionName}:`, error);
+    } else {
+      console.error(`Error deleting from ${collectionName}:`, error);
+    }
     return { success: false, error: error.message };
   }
 };
@@ -159,7 +171,16 @@ export const registerUser = async (email, password, userData) => {
     
     console.log('🔵 Saving to Firestore:', ownerData);
     
-    await setDoc(doc(db, 'owners', user.uid), ownerData);
+    try {
+      await setDoc(doc(db, 'owners', user.uid), ownerData);
+    } catch (writeError) {
+      if (writeError.code === 'permission-denied' || (writeError.message || '').toLowerCase().includes('permission')) {
+        console.error('❌ Permission Denied while writing owner profile:', writeError);
+      } else {
+        console.error('❌ Error writing owner profile:', writeError);
+      }
+      throw writeError;
+    }
     console.log('✅ User data saved to Firestore');
     
     return { 
@@ -218,7 +239,7 @@ export const loginUser = async (email, password) => {
     console.error('❌ User authenticated but no data found in Firestore');
     return { 
       success: false, 
-      error: 'Account found but user data is missing. Please contact support.' 
+      error: 'Auth successful, but no database profile found' 
     };
     
   } catch (error) {
