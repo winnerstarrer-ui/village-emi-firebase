@@ -1,16 +1,28 @@
+// firebaseService.js - Complete Firebase Integration
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, 
+  collection, 
+  addDoc, 
+  getDocs, 
+  updateDoc, 
+  deleteDoc, 
   doc, 
+  query, 
+  where, 
+  onSnapshot,
   setDoc,
-  collection,
-  query,
-  where,
-  getDocs,
   getDoc
 } from 'firebase/firestore';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
 
+// Firebase Configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBltf4ue-UxjmRNAYyxHFNXBtOe6bNyuI4",
   authDomain: "village-emi-manager.firebaseapp.com",
@@ -20,197 +32,292 @@ const firebaseConfig = {
   appId: "1:1011535673411:web:4d20038e67e4ffe33abcf6"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-export const registerUser = async (email, password, userData) => {
+// ============================================================
+// FIRESTORE CRUD OPERATIONS
+// ============================================================
+
+export const addToFirestore = async (collectionName, data) => {
   try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+    const docRef = await addDoc(collection(db, collectionName), {
+      ...data,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    return { success: true, id: docRef.id };
+  } catch (error) {
+    console.error(`Error adding to ${collectionName}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getAllFromFirestore = async (collectionName) => {
+  try {
+    const querySnapshot = await getDocs(collection(db, collectionName));
+    const data = [];
+    querySnapshot.forEach((doc) => {
+      data.push({ id: doc.id, ...doc.data() });
+    });
+    return data;
+  } catch (error) {
+    console.error(`Error getting ${collectionName}:`, error);
+    return [];
+  }
+};
+
+export const getFilteredFromFirestore = async (collectionName, field, operator, value) => {
+  try {
+    const q = query(collection(db, collectionName), where(field, operator, value));
+    const querySnapshot = await getDocs(q);
+    const data = [];
+    querySnapshot.forEach((doc) => {
+      data.push({ id: doc.id, ...doc.data() });
+    });
+    return data;
+  } catch (error) {
+    console.error(`Error filtering ${collectionName}:`, error);
+    return [];
+  }
+};
+
+export const updateInFirestore = async (collectionName, docId, data) => {
+  try {
+    const docRef = doc(db, collectionName, docId);
+    await updateDoc(docRef, {
+      ...data,
+      updatedAt: Date.now()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error(`Error updating ${collectionName}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const deleteFromFirestore = async (collectionName, docId) => {
+  try {
+    await deleteDoc(doc(db, collectionName, docId));
+    return { success: true };
+  } catch (error) {
+    console.error(`Error deleting from ${collectionName}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const listenToCollection = (collectionName, callback, filterField = null, filterValue = null) => {
+  try {
+    let q;
+    if (filterField && filterValue) {
+      q = query(collection(db, collectionName), where(filterField, '==', filterValue));
+    } else {
+      q = collection(db, collectionName);
+    }
     
-    await setDoc(doc(db, 'owners', user.uid), {
-      userId: user.uid,
-      email: user.email,
-      businessName: userData.businessName || '',
-      ownerName: userData.ownerName || '',
-      role: 'owner',
-      createdAt: Date.now()
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const data = [];
+      querySnapshot.forEach((doc) => {
+        data.push({ id: doc.id, ...doc.data() });
+      });
+      callback(data);
+    }, (error) => {
+      console.error(`Error listening to ${collectionName}:`, error);
+      callback([]);
     });
     
-    return { success: true, user };
+    return unsubscribe;
   } catch (error) {
-    console.error("Firebase Error:", error.message);
-    return { success: false, error: error.message };
+    console.error(`Error setting up listener for ${collectionName}:`, error);
+    return () => {};
+  }
+};
+
+// ============================================================
+// AUTHENTICATION OPERATIONS
+// ============================================================
+
+export const registerUser = async (email, password, userData) => {
+  try {
+    console.log('🔵 Starting registration for:', email);
+    
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    console.log('✅ Firebase Auth user created:', user.uid);
+    
+    const ownerData = {
+      userId: user.uid,
+      email: user.email,
+      businessName: userData.businessName,
+      ownerName: userData.ownerName,
+      phone: userData.phone || '',
+      role: 'owner',
+      createdAt: Date.now()
+    };
+    
+    console.log('🔵 Saving to Firestore:', ownerData);
+    
+    await setDoc(doc(db, 'owners', user.uid), ownerData);
+    console.log('✅ User data saved to Firestore');
+    
+    return { 
+      success: true, 
+      user: { 
+        id: user.uid, 
+        ...ownerData 
+      } 
+    };
+    
+  } catch (error) {
+    console.error('❌ Registration error:', error);
+    let errorMessage = 'Registration failed';
+    
+    if (error.code === 'auth/email-already-in-use') {
+      errorMessage = 'Email already registered';
+    } else if (error.code === 'auth/weak-password') {
+      errorMessage = 'Password should be at least 6 characters';
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = 'Invalid email address';
+    } else {
+      errorMessage = error.message;
+    }
+    
+    return { success: false, error: errorMessage };
   }
 };
 
 export const loginUser = async (email, password) => {
   try {
-    const res = await signInWithEmailAndPassword(auth, email, password);
+    console.log('🔵 Starting login for:', email);
     
-    // Fetch user data from Firestore
-    const userDoc = await getDoc(doc(db, 'owners', res.user.uid));
-    const userData = userDoc.exists() ? userDoc.data() : null;
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    console.log('✅ Firebase Auth successful:', user.uid);
     
-    return { 
-      success: true, 
-      user: res.user,
-      userData: userData || {
-        userId: res.user.uid,
-        email: res.user.email,
-        ownerName: 'Owner',
-        businessName: 'My Business',
-        role: 'owner'
-      }
-    };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-};
-
-// Fetch data from Firestore for current user
-export const fetchUserDataFromCloud = async (userId) => {
-  try {
-    const data = {};
+    const ownerDocRef = doc(db, 'owners', user.uid);
+    const ownerDoc = await getDoc(ownerDocRef);
     
-    // Fetch villages
-    const villagesQuery = query(collection(db, 'villages'), where('ownerId', '==', userId));
-    const villagesSnapshot = await getDocs(villagesQuery);
-    data.villages = villagesSnapshot.docs.map(doc => doc.data());
-    
-    // Fetch agents
-    const agentsQuery = query(collection(db, 'agents'), where('ownerId', '==', userId));
-    const agentsSnapshot = await getDocs(agentsQuery);
-    data.agents = agentsSnapshot.docs.map(doc => doc.data());
-    
-    // Fetch products
-    const productsQuery = query(collection(db, 'products'), where('ownerId', '==', userId));
-    const productsSnapshot = await getDocs(productsQuery);
-    data.products = productsSnapshot.docs.map(doc => doc.data());
-    
-    // Fetch customers
-    const customersQuery = query(collection(db, 'customers'), where('ownerId', '==', userId));
-    const customersSnapshot = await getDocs(customersQuery);
-    data.customers = customersSnapshot.docs.map(doc => doc.data());
-    
-    // Fetch sales
-    const salesQuery = query(collection(db, 'sales'), where('ownerId', '==', userId));
-    const salesSnapshot = await getDocs(salesQuery);
-    data.sales = salesSnapshot.docs.map(doc => doc.data());
-    
-    // Fetch collections
-    const collectionsQuery = query(collection(db, 'collections'), where('ownerId', '==', userId));
-    const collectionsSnapshot = await getDocs(collectionsQuery);
-    data.collections = collectionsSnapshot.docs.map(doc => doc.data());
-    
-    return { success: true, data };
-  } catch (error) {
-    console.error("Error fetching data from cloud:", error);
-    return { success: false, error: error.message };
-  }
-};
-
-// Generic function to add/update documents
-export const addToFirestore = async (collectionName, data) => {
-  try {
-    if (!data.id) {
-      return { success: false, error: 'Data must have an id field' };
+    if (ownerDoc.exists()) {
+      console.log('✅ Owner data found in Firestore');
+      const ownerData = { id: user.uid, ...ownerDoc.data() };
+      return { success: true, user: ownerData, role: 'owner' };
     }
     
-    await setDoc(doc(db, collectionName, data.id), {
-      ...data,
-      syncedAt: Date.now()
-    });
+    console.log('🔵 Not an owner, checking agents...');
+    
+    const agents = await getAllFromFirestore('agents');
+    const agent = agents.find(a => a.email === email);
+    
+    if (agent) {
+      console.log('✅ Agent data found');
+      return { success: true, user: agent, role: 'agent' };
+    }
+    
+    console.error('❌ User authenticated but no data found in Firestore');
+    return { 
+      success: false, 
+      error: 'Account found but user data is missing. Please contact support.' 
+    };
+    
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    let errorMessage = 'Invalid email or password';
+    
+    if (error.code === 'auth/user-not-found') {
+      errorMessage = 'No account found with this email';
+    } else if (error.code === 'auth/wrong-password') {
+      errorMessage = 'Incorrect password';
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = 'Invalid email address';
+    } else if (error.code === 'auth/too-many-requests') {
+      errorMessage = 'Too many failed attempts. Please try again later.';
+    } else {
+      errorMessage = error.message;
+    }
+    
+    return { success: false, error: errorMessage };
+  }
+};
+
+export const logoutUser = async () => {
+  try {
+    await signOut(auth);
     return { success: true };
   } catch (error) {
-    console.error(`Error saving to ${collectionName}:`, error);
+    console.error('Logout error:', error);
     return { success: false, error: error.message };
   }
 };
 
-// Save functions
-export const saveVillageToCloud = async (villageData, ownerId) => {
+export const onAuthChange = (callback) => {
+  return onAuthStateChanged(auth, callback);
+};
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
+export const generateId = () => {
+  return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+};
+
+export const seedDemoData = async (ownerId) => {
   try {
-    await setDoc(doc(db, 'villages', villageData.id), {
-      ...villageData,
-      ownerId: ownerId,
-      syncedAt: Date.now()
+    console.log('🔵 Seeding demo data for owner:', ownerId);
+    
+    const villages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
+    if (villages.length > 0) {
+      console.log('✅ Demo data already exists');
+      return { success: true, message: 'Data already exists' };
+    }
+    
+    await addToFirestore('villages', {
+      ownerId,
+      villageName: 'Rampur',
+      nextCustomerId: 805
     });
-    return { success: true };
+    
+    await addToFirestore('villages', {
+      ownerId,
+      villageName: 'Sundarabad',
+      nextCustomerId: 803
+    });
+    
+    await addToFirestore('products', {
+      ownerId,
+      productName: 'Mixer Grinder',
+      price: 3500
+    });
+    
+    await addToFirestore('products', {
+      ownerId,
+      productName: 'Cooker (3L)',
+      price: 2800
+    });
+    
+    console.log('✅ Demo data seeded successfully');
+    return { success: true, message: 'Demo data created' };
   } catch (error) {
-    console.error("Cloud Error saving village:", error);
+    console.error('❌ Error seeding demo data:', error);
     return { success: false, error: error.message };
   }
 };
 
-export const saveAgentToCloud = async (agentData, ownerId) => {
-  try {
-    await setDoc(doc(db, 'agents', agentData.id), {
-      ...agentData,
-      ownerId: ownerId,
-      syncedAt: Date.now()
-    });
-    return { success: true };
-  } catch (error) {
-    console.error("Cloud Error saving agent:", error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const saveProductToCloud = async (productData, ownerId) => {
-  try {
-    await setDoc(doc(db, 'products', productData.id), {
-      ...productData,
-      ownerId: ownerId,
-      syncedAt: Date.now()
-    });
-    return { success: true };
-  } catch (error) {
-    console.error("Cloud Error saving product:", error);
-    return { success: false, error: error.message };
-  }
-};
-
-// Save other data types
-export const saveCustomerToCloud = async (customerData, ownerId) => {
-  try {
-    await setDoc(doc(db, 'customers', customerData.id), {
-      ...customerData,
-      ownerId: ownerId,
-      syncedAt: Date.now()
-    });
-    return { success: true };
-  } catch (error) {
-    console.error("Cloud Error saving customer:", error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const saveSaleToCloud = async (saleData, ownerId) => {
-  try {
-    await setDoc(doc(db, 'sales', saleData.id), {
-      ...saleData,
-      ownerId: ownerId,
-      syncedAt: Date.now()
-    });
-    return { success: true };
-  } catch (error) {
-    console.error("Cloud Error saving sale:", error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const saveCollectionToCloud = async (collectionData, ownerId) => {
-  try {
-    await setDoc(doc(db, 'collections', collectionData.id), {
-      ...collectionData,
-      ownerId: ownerId,
-      syncedAt: Date.now()
-    });
-    return { success: true };
-  } catch (error) {
-    console.error("Cloud Error saving collection:", error);
-    return { success: false, error: error.message };
-  }
+export default {
+  db,
+  auth,
+  addToFirestore,
+  getAllFromFirestore,
+  getFilteredFromFirestore,
+  updateInFirestore,
+  deleteFromFirestore,
+  listenToCollection,
+  registerUser,
+  loginUser,
+  logoutUser,
+  onAuthChange,
+  generateId,
+  seedDemoData
 };
