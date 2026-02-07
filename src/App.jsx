@@ -250,75 +250,31 @@ const getLS = (key) => {
   const v = _memStore[key];
   return v !== undefined ? JSON.parse(JSON.stringify(v)) : null;
 };
-const setLS = (key, val) => { _memStore[key] = JSON.parse(JSON.stringify(val)); };
+const setLS = (key, val) => {
+  _memStore[key] = JSON.parse(JSON.stringify(val));
+  if (key !== STORAGE_KEYS.CURRENT_USER) {
+    const owner = _memStore[STORAGE_KEYS.CURRENT_USER] || null;
+    const ownerId = owner && owner.id ? owner.id : null;
+    const payload = { key, ownerId, data: JSON.parse(JSON.stringify(val)), updatedAt: Date.now() };
+    FB.getFilteredFromFirestore('app_state', 'key', '==', key)
+      .then((docs) => {
+        const existing = ownerId ? docs.find(d => d.ownerId === ownerId) : docs[0];
+        if (existing && existing.id) {
+          return FB.updateInFirestore('app_state', existing.id, payload);
+        }
+        return FB.addToFirestore('app_state', payload);
+      })
+      .catch(() => {});
+  }
+};
 
 // Seed demo data
 const seedData = () => {
-  if (getLS(STORAGE_KEYS.OWNERS)) return; // already seeded
-
-  const ownerId = 'owner_demo_001';
-  setLS(STORAGE_KEYS.OWNERS, [{ id: ownerId, email: 'owner@demo.com', password: btoa('demo123'), businessName: 'Kumar Enterprises', ownerName: 'Vikram Kumar', phone: '9876543210', role: 'owner' }]);
-
-  const villages = [
-    { id: 'v1', ownerId, villageName: 'Rampur', nextCustomerId: 805 },
-    { id: 'v2', ownerId, villageName: 'Sundarabad', nextCustomerId: 803 },
-    { id: 'v3', ownerId, villageName: 'Greenfield', nextCustomerId: 802 },
-  ];
-  setLS(STORAGE_KEYS.VILLAGES, villages);
-
-  const agents = [
-    { id: 'agent_001', ownerId, agentName: 'Rajesh Mehta', email: 'rajesh@demo.com', password: btoa('demo123'), phone: '8765432100', assignedVillages: ['v1', 'v2'], role: 'agent' },
-    { id: 'agent_002', ownerId, agentName: 'Priya Das', email: 'priya@demo.com', password: btoa('demo123'), phone: '8765432101', assignedVillages: ['v2', 'v3'], role: 'agent' },
-  ];
-  setLS(STORAGE_KEYS.AGENTS, agents);
-
-  const products = [
-    { id: 'p1', ownerId, productName: 'Mixer Grinder', price: 3500 },
-    { id: 'p2', ownerId, productName: 'Cooker (3L)', price: 2800 },
-    { id: 'p3', ownerId, productName: 'Dining Table', price: 8000 },
-    { id: 'p4', ownerId, productName: 'Almirah', price: 6500 },
-    { id: 'p5', ownerId, productName: 'Ceiling Fan', price: 1800 },
-  ];
-  setLS(STORAGE_KEYS.PRODUCTS, products);
-
-  const customers = [
-    { id: 'c_v1_801', ownerId, villageId: 'v1', customerNumber: 801, customerName: 'Ramesh Kumar', phone: '9111111101', address: 'Main Street, Rampur' },
-    { id: 'c_v1_802', ownerId, villageId: 'v1', customerNumber: 802, customerName: 'Sunita Devi', phone: '9111111102', address: 'Patel Road, Rampur' },
-    { id: 'c_v1_803', ownerId, villageId: 'v1', customerNumber: 803, customerName: 'Mohan Lal', phone: '9111111103', address: 'Temple Lane, Rampur' },
-    { id: 'c_v1_804', ownerId, villageId: 'v1', customerNumber: 804, customerName: 'Kavita Yadav', phone: '9111111104', address: 'River Road, Rampur' },
-    { id: 'c_v2_801', ownerId, villageId: 'v2', customerNumber: 801, customerName: 'Arjun Singh', phone: '9222222201', address: 'High Street, Sundarabad' },
-    { id: 'c_v2_802', ownerId, villageId: 'v2', customerNumber: 802, customerName: 'Deepa Nair', phone: '9222222202', address: 'Market Area, Sundarabad' },
-    { id: 'c_v3_801', ownerId, villageId: 'v3', customerNumber: 801, customerName: 'Anil Sharma', phone: '9333333301', address: 'Park Lane, Greenfield' },
-  ];
-  setLS(STORAGE_KEYS.CUSTOMERS, customers);
-
-  const now = Date.now();
-  const day = 86400000;
-  const sales = [
-    { id: 's1', ownerId, villageId: 'v1', customerId: 'c_v1_801', productName: 'Mixer Grinder', productPrice: 3500, advanceAmount: 500, outstandingAmount: 1500, emiAmount: 200, emiFrequency: 'weekly', status: 'active', saleDate: now - 15 * day },
-    { id: 's2', ownerId, villageId: 'v1', customerId: 'c_v1_802', productName: 'Cooker (3L)', productPrice: 2800, advanceAmount: 300, outstandingAmount: 800, emiAmount: 150, emiFrequency: 'weekly', status: 'active', saleDate: now - 20 * day },
-    { id: 's3', ownerId, villageId: 'v1', customerId: 'c_v1_803', productName: 'Dining Table', productPrice: 8000, advanceAmount: 1000, outstandingAmount: 5200, emiAmount: 500, emiFrequency: 'weekly', status: 'active', saleDate: now - 10 * day },
-    { id: 's4', ownerId, villageId: 'v2', customerId: 'c_v2_801', productName: 'Almirah', productPrice: 6500, advanceAmount: 800, outstandingAmount: 3200, emiAmount: 400, emiFrequency: 'weekly', status: 'active', saleDate: now - 12 * day },
-    { id: 's5', ownerId, villageId: 'v2', customerId: 'c_v2_802', productName: 'Ceiling Fan', productPrice: 1800, advanceAmount: 200, outstandingAmount: 600, emiAmount: 200, emiFrequency: 'weekly', status: 'active', saleDate: now - 8 * day },
-    { id: 's6', ownerId, villageId: 'v3', customerId: 'c_v3_801', productName: 'Cooker (3L)', productPrice: 2800, advanceAmount: 0, outstandingAmount: 1200, emiAmount: 200, emiFrequency: 'weekly', status: 'active', saleDate: now - 18 * day },
-    { id: 's7', ownerId, villageId: 'v1', customerId: 'c_v1_804', productName: 'Ceiling Fan', productPrice: 1800, advanceAmount: 200, outstandingAmount: 0, emiAmount: 200, emiFrequency: 'weekly', status: 'completed', saleDate: now - 30 * day },
-  ];
-  setLS(STORAGE_KEYS.SALES, sales);
-
-  const payments = [
-    { id: 'pay_01', ownerId, villageId: 'v1', customerId: 'c_v1_801', saleId: 's1', agentId: 'agent_001', amountCollected: 200, paymentDate: now - 8 * day },
-    { id: 'pay_02', ownerId, villageId: 'v1', customerId: 'c_v1_801', saleId: 's1', agentId: 'agent_001', amountCollected: 200, paymentDate: now - 1 * day },
-    { id: 'pay_03', ownerId, villageId: 'v1', customerId: 'c_v1_802', saleId: 's2', agentId: 'agent_001', amountCollected: 150, paymentDate: now - 7 * day },
-    { id: 'pay_04', ownerId, villageId: 'v1', customerId: 'c_v1_803', saleId: 's3', agentId: 'agent_001', amountCollected: 500, paymentDate: now - 3 * day },
-    { id: 'pay_05', ownerId, villageId: 'v2', customerId: 'c_v2_801', saleId: 's4', agentId: 'agent_002', amountCollected: 400, paymentDate: now - 5 * day },
-    { id: 'pay_06', ownerId, villageId: 'v2', customerId: 'c_v2_802', saleId: 's5', agentId: 'agent_002', amountCollected: 200, paymentDate: now - 2 * day },
-    { id: 'pay_07', ownerId, villageId: 'v3', customerId: 'c_v3_801', saleId: 's6', agentId: 'agent_002', amountCollected: 200, paymentDate: now - 4 * day },
-    // Today's payments
-    { id: 'pay_08', ownerId, villageId: 'v1', customerId: 'c_v1_801', saleId: 's1', agentId: 'agent_001', amountCollected: 200, paymentDate: now - 2 * 3600000 },
-    { id: 'pay_09', ownerId, villageId: 'v2', customerId: 'c_v2_801', saleId: 's4', agentId: 'agent_002', amountCollected: 400, paymentDate: now - 1 * 3600000 },
-    { id: 'pay_10', ownerId, villageId: 'v1', customerId: 'c_v1_803', saleId: 's3', agentId: 'agent_001', amountCollected: 300, paymentDate: now - 30 * 60000 },
-  ];
-  setLS(STORAGE_KEYS.PAYMENTS, payments);
+  const u = getLS(STORAGE_KEYS.CURRENT_USER);
+  if (!u || u.role !== 'owner') return;
+  FB.getFilteredFromFirestore('villages', 'ownerId', '==', u.id)
+    .then((list) => { if ((list || []).length === 0) FB.seedDemoData(u.id); })
+    .catch(() => {});
 };
 
 // ============================================================
@@ -397,30 +353,23 @@ const LoginScreen = ({ onLogin }) => {
 
   const handleLogin = () => {
     setError('');
-    if (role === 'owner') {
-      if (isRegister) {
-        if (!email || !password || !regData.businessName || !regData.ownerName) { setError('Fill all fields'); return; }
-        const owners = getLS(STORAGE_KEYS.OWNERS) || [];
-        if (owners.find(o => o.email === email)) { setError('Email already registered'); return; }
-        const newOwner = { id: uid(), email, password: btoa(password), ...regData, role: 'owner' };
-        owners.push(newOwner);
-        setLS(STORAGE_KEYS.OWNERS, owners);
-        setLS(STORAGE_KEYS.CURRENT_USER, newOwner);
-        onLogin(newOwner);
-      } else {
-        const owners = getLS(STORAGE_KEYS.OWNERS) || [];
-        const found = owners.find(o => o.email === email && o.password === btoa(password));
-        if (!found) { setError('Invalid email or password'); return; }
-        setLS(STORAGE_KEYS.CURRENT_USER, found);
-        onLogin(found);
-      }
-    } else {
-      const agents = getLS(STORAGE_KEYS.AGENTS) || [];
-      const found = agents.find(a => a.email === email && a.password === btoa(password));
-      if (!found) { setError('Invalid email or password'); return; }
-      setLS(STORAGE_KEYS.CURRENT_USER, { ...found, role: 'agent' });
-      onLogin({ ...found, role: 'agent' });
+    if (role === 'owner' && isRegister) {
+      if (!email || !password || !regData.businessName || !regData.ownerName) { setError('Fill all fields'); return; }
+      FB.registerUser(email, password, regData).then(res => {
+        if (!res.success) { setError(res.error || 'Registration failed'); return; }
+        setLS(STORAGE_KEYS.CURRENT_USER, { ...res.user, role: 'owner' });
+        onLogin({ ...res.user, role: 'owner' });
+        FB.seedDemoData(res.user.id);
+      }).catch(() => setError('Registration failed'));
+      return;
     }
+    FB.loginUser(email, password).then(res => {
+      if (!res.success) { setError(res.error || 'Invalid email or password'); return; }
+      const userWithRole = { ...res.user, role: res.role || role };
+      setLS(STORAGE_KEYS.CURRENT_USER, userWithRole);
+      onLogin(userWithRole);
+      if ((userWithRole.role || '') === 'owner') FB.seedDemoData(userWithRole.id);
+    }).catch(() => setError('Invalid email or password'));
   };
 
   return (
