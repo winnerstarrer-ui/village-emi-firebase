@@ -252,7 +252,7 @@ const getLS = (key) => {
 };
 const setLS = (key, val) => {
   _memStore[key] = JSON.parse(JSON.stringify(val));
-  if (key !== STORAGE_KEYS.CURRENT_USER) {
+  if (key !== STORAGE_KEYS.CURRENT_USER && key !== STORAGE_KEYS.VILLAGES && key !== STORAGE_KEYS.AGENTS && key !== STORAGE_KEYS.PRODUCTS) {
     const owner = _memStore[STORAGE_KEYS.CURRENT_USER] || null;
     const ownerId = owner && owner.id ? owner.id : null;
     const payload = { key, ownerId, data: JSON.parse(JSON.stringify(val)), updatedAt: Date.now() };
@@ -590,6 +590,7 @@ const VillageManagement = ({ user }) => {
       if (villages.find(v => v.villageName.toLowerCase() === form.villageName.toLowerCase())) { showToast('Village name already exists', 'error'); return; }
       const nv = { id: uid(), ownerId: user.id, villageName: form.villageName, nextCustomerId: Number(form.startingId) || 801 };
       all.push(nv);
+      FB.addToFirestore('villages', nv);
       showToast('Village added');
     }
     setLS(STORAGE_KEYS.VILLAGES, all);
@@ -688,7 +689,9 @@ const AgentManagement = ({ user }) => {
     } else {
       if (!form.password) { showToast('Set a password', 'error'); return; }
       if (all.find(a => a.email === form.email)) { showToast('Email already exists', 'error'); return; }
-      all.push({ id: uid(), ownerId: user.id, agentName: form.agentName, email: form.email, password: btoa(form.password), phone: form.phone, assignedVillages: form.assignedVillages, role: 'agent' });
+      const na = { id: uid(), ownerId: user.id, agentName: form.agentName, email: form.email, password: btoa(form.password), phone: form.phone, assignedVillages: form.assignedVillages, role: 'agent' };
+      all.push(na);
+      FB.addToFirestore('agents', na);
       showToast('Agent added');
     }
     setLS(STORAGE_KEYS.AGENTS, all);
@@ -799,7 +802,9 @@ const ProductManagement = ({ user }) => {
       all = all.map(p => p.id === editProduct.id ? { ...p, productName: form.productName, price: Number(form.price) } : p);
       showToast('Product updated');
     } else {
-      all.push({ id: uid(), ownerId: user.id, productName: form.productName, price: Number(form.price) });
+      const np = { id: uid(), ownerId: user.id, productName: form.productName, price: Number(form.price) };
+      all.push(np);
+      FB.addToFirestore('products', np);
       showToast('Product added');
     }
     setLS(STORAGE_KEYS.PRODUCTS, all);
@@ -2006,11 +2011,6 @@ export default function App() {
   );
 }
 // pad: maintain exact line count
-// pad
-// pad
-// pad
-// pad
-// pad
 // pad
 // pad
 // pad
