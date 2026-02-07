@@ -352,10 +352,12 @@ const LoginScreen = ({ onLogin }) => {
   const [regData, setRegData] = useState({ businessName: '', ownerName: '', phone: '' });
 
   const handleLogin = async () => {
+    console.log('Button Clicked - Role:', role, 'isRegister:', isRegister);
     setError('');
     if (role === 'owner' && isRegister) {
       if (!email || !password || !regData.businessName || !regData.ownerName) { setError('Fill all fields'); return; }
       try {
+        console.log('Attempting Firebase Auth with:', email);
         const res = await FB.registerUser(email, password, regData);
         if (!res.success) { setError(res.error || 'Registration failed'); return; }
         setLS(STORAGE_KEYS.CURRENT_USER, { ...res.user, role: 'owner' });
@@ -368,6 +370,7 @@ const LoginScreen = ({ onLogin }) => {
       return;
     }
     try {
+      console.log('Attempting Firebase Auth with:', email);
       const res = await FB.loginUser(email, password);
       if (!res.success) { setError(res.error || 'Invalid email or password'); return; }
       const userWithRole = { ...res.user, role: res.role || role };
