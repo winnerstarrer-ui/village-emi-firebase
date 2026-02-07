@@ -617,7 +617,9 @@ const VillageManagement = ({ user }) => {
     setForm({ villageName: '', startingId: 801 });
   };
 
-  const del = (id) => {
+  const del = async (id) => {
+    const res = await FB.deleteFromFirestore('villages', id);
+    if (!res.success) { showToast(res.error || 'Delete failed', 'error'); return; }
     const all = (getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.id !== id);
     setLS(STORAGE_KEYS.VILLAGES, all);
     setVillages(all.filter(v => v.ownerId === user.id));
@@ -718,7 +720,9 @@ const AgentManagement = ({ user }) => {
     setForm({ agentName: '', email: '', password: '', phone: '', assignedVillages: [] });
   };
 
-  const del = (id) => {
+  const del = async (id) => {
+    const res = await FB.deleteFromFirestore('agents', id);
+    if (!res.success) { showToast(res.error || 'Delete failed', 'error'); return; }
     const all = (getLS(STORAGE_KEYS.AGENTS) || []).filter(a => a.id !== id);
     setLS(STORAGE_KEYS.AGENTS, all);
     setAgents(all.filter(a => a.ownerId === user.id));
@@ -831,7 +835,9 @@ const ProductManagement = ({ user }) => {
     setForm({ productName: '', price: '' });
   };
 
-  const del = (id) => {
+  const del = async (id) => {
+    const res = await FB.deleteFromFirestore('products', id);
+    if (!res.success) { showToast(res.error || 'Delete failed', 'error'); return; }
     const all = (getLS(STORAGE_KEYS.PRODUCTS) || []).filter(p => p.id !== id);
     setLS(STORAGE_KEYS.PRODUCTS, all);
     setProducts(all.filter(p => p.ownerId === user.id));
@@ -2040,12 +2046,6 @@ export default function App() {
     </>
   );
 }
-// pad
-// pad
-// pad
-// pad
-// pad
-// pad
 // pad
 // pad
 // pad
