@@ -361,8 +361,17 @@ const LoginScreen = ({ onLogin }) => {
         console.log('Attempting Firebase Auth with:', email);
         const res = await FB.registerUser(email, password, regData);
         if (!res.success) { setError(res.error || 'Registration failed'); return; }
-        setLS(STORAGE_KEYS.CURRENT_USER, { ...res.user, role: 'owner' });
-        onLogin({ ...res.user, role: 'owner' });
+        const ownerUser = { ...res.user, role: 'owner' };
+        setLS(STORAGE_KEYS.CURRENT_USER, ownerUser);
+        const [vs, ps, as] = await Promise.all([
+          FB.getFilteredFromFirestore('villages','ownerId','==',ownerUser.id),
+          FB.getFilteredFromFirestore('products','ownerId','==',ownerUser.id),
+          FB.getFilteredFromFirestore('agents','ownerId','==',ownerUser.id)
+        ]);
+        setLS(STORAGE_KEYS.VILLAGES, vs);
+        setLS(STORAGE_KEYS.PRODUCTS, ps);
+        setLS(STORAGE_KEYS.AGENTS, as);
+        onLogin(ownerUser);
         await FB.seedDemoData(res.user.id);
       } catch (e) {
         console.error('Registration flow error:', e);
@@ -377,6 +386,14 @@ const LoginScreen = ({ onLogin }) => {
       if (!res.success) { setError(res.error || 'Invalid email or password'); return; }
       const userWithRole = { ...res.user, role: res.role || role };
       setLS(STORAGE_KEYS.CURRENT_USER, userWithRole);
+      const [vs, ps, as] = await Promise.all([
+        FB.getFilteredFromFirestore('villages','ownerId','==',userWithRole.id),
+        FB.getFilteredFromFirestore('products','ownerId','==',userWithRole.id),
+        FB.getFilteredFromFirestore('agents','ownerId','==',userWithRole.id)
+      ]);
+      setLS(STORAGE_KEYS.VILLAGES, vs);
+      setLS(STORAGE_KEYS.PRODUCTS, ps);
+      setLS(STORAGE_KEYS.AGENTS, as);
       onLogin(userWithRole);
       if ((userWithRole.role || '') === 'owner') await FB.seedDemoData(userWithRole.id);
     } catch (e) {
@@ -1908,6 +1925,19 @@ export default function App() {
 
   const [user, setUser] = useState(() => getLS(STORAGE_KEYS.CURRENT_USER));
   const [page, setPage] = useState('dashboard');
+  useEffect(() => {
+    if (!user || !user.id) return;
+    (async () => {
+      const [vs, ps, as] = await Promise.all([
+        FB.getFilteredFromFirestore('villages','ownerId','==',user.id),
+        FB.getFilteredFromFirestore('products','ownerId','==',user.id),
+        FB.getFilteredFromFirestore('agents','ownerId','==',user.id)
+      ]);
+      setLS(STORAGE_KEYS.VILLAGES, vs);
+      setLS(STORAGE_KEYS.PRODUCTS, ps);
+      setLS(STORAGE_KEYS.AGENTS, as);
+    })();
+  }, [user && user.id]);
 
   const handleLogout = () => { setLS(STORAGE_KEYS.CURRENT_USER, null); setUser(null); setPage('dashboard'); };
 
@@ -2010,6 +2040,126 @@ export default function App() {
     </>
   );
 }
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
 // pad: maintain exact line count
 // pad
 // pad
