@@ -3,7 +3,8 @@ import {
   getAuth, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signOut 
+  signOut,
+  onAuthStateChanged 
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -16,7 +17,9 @@ import {
   where, 
   getDocs, 
   setDoc,
-  serverTimestamp 
+  getDoc,
+  serverTimestamp,
+  enableIndexedDbPersistence
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -28,59 +31,126 @@ const firebaseConfig = {
   appId: "1:1011535673411:web:4d20038e67e4ffe33abcf6"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Generic Firestore operations
+// Enable offline persistence (optional but recommended)
+try {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn('Persistence failed: Multiple tabs open');
+    } else if (err.code === 'unimplemented') {
+      console.warn('Persistence not supported in this browser');
+    }
+  });
+} catch (e) {
+  console.warn('Persistence setup error:', e);
+}
+
+// Helper to wait for auth
+const waitForAuth = () => {
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+};
+
+// Generic Firestore operations with better error handling
 export const addToFirestore = async (collectionName, data) => {
   try {
+    console.log(`📝 Adding to ${collectionName}:`, data);
+    
+    // Wait for auth if needed
+    await waitForAuth();
+    
     const docRef = await addDoc(collection(db, collectionName), {
       ...data,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
+    
+    console.log(`✅ Added to ${collectionName} with ID:`, docRef.id);
     return { success: true, id: docRef.id };
   } catch (error) {
-    console.error(`Error adding to ${collectionName}:`, error);
+    console.error(`❌ Error adding to ${collectionName}:`, error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
     return { success: false, error: error.message };
   }
 };
 
 export const updateInFirestore = async (collectionName, docId, data) => {
   try {
+    console.log(`📝 Updating ${collectionName}/${docId}:`, data);
+    
+    await waitForAuth();
+    
     const docRef = doc(db, collectionName, docId);
     await updateDoc(docRef, {
       ...data,
       updatedAt: serverTimestamp()
     });
+    
+    console.log(`✅ Updated ${collectionName}/${docId}`);
     return { success: true };
   } catch (error) {
-    console.error(`Error updating ${collectionName}/${docId}:`, error);
+    console.error(`❌ Error updating ${collectionName}/${docId}:`, error);
+    console.error('Error code:', error.code);
     return { success: false, error: error.message };
   }
 };
 
 export const deleteFromFirestore = async (collectionName, docId) => {
   try {
-    console.log(`Attempting to delete from ${collectionName}:`, docId);
+    console.log(`🗑️ Deleting from ${collectionName}:`, docId);
+    
+    await waitForAuth();
+    
     const docRef = doc(db, collectionName, docId);
     await deleteDoc(docRef);
-    console.log(`Successfully deleted from ${collectionName}:`, docId);
+    
+    console.log(`✅ Deleted from ${collectionName}:`, docId);
     return { success: true };
   } catch (error) {
-    console.error(`Error deleting ${collectionName}/${docId}:`, error);
+    console.error(`❌ Error deleting ${collectionName}/${docId}:`, error);
+    console.error('Error code:', error.code);
     return { success: false, error: error.message };
   }
 };
 
 export const getFilteredFromFirestore = async (collectionName, field, operator, value) => {
   try {
+    console.log(`🔍 Fetching from ${collectionName} where ${field} ${operator} ${value}`);
+    
+    // Wait for auth to be ready
+    const user = await waitForAuth();
+    
+    if (!user && collectionName !== 'owners') {
+      console.warn('⚠️ User not authenticated, returning empty array');
+      return [];
+    }
+    
     const q = query(collection(db, collectionName), where(field, operator, value));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    const results = querySnapshot.docs.map(doc => ({ 
+      id: doc.id, 
+      ...doc.data() 
+    }));
+    
+    console.log(`✅ Fetched ${results.length} items from ${collectionName}`);
+    return results;
+    
   } catch (error) {
-    console.error(`Error fetching from ${collectionName}:`, error);
+    console.error(`❌ Error fetching from ${collectionName}:`, error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    
+    // Return empty array on error to prevent crashes
     return [];
   }
 };
@@ -88,9 +158,12 @@ export const getFilteredFromFirestore = async (collectionName, field, operator, 
 // Auth operations
 export const registerUser = async (email, password, userData) => {
   try {
-    console.log("🔵 Starting registration for:", email);
+    console.log("📝 Starting registration for:", email);
+    
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
+    
+    console.log("✅ Firebase Auth user created:", user.uid);
     
     // Store owner data in Firestore
     const ownerData = {
@@ -104,18 +177,31 @@ export const registerUser = async (email, password, userData) => {
     };
     
     await setDoc(doc(db, 'owners', user.uid), ownerData);
-    console.log("✅ Owner registered and saved to Firestore:", user.uid);
+    console.log("✅ Owner registered and saved to Firestore");
     
-    return { success: true, user: ownerData };
+    return { success: true, user: { ...ownerData, id: user.uid } };
+    
   } catch (error) {
-    console.error("Registration error:", error);
-    return { success: false, error: error.message };
+    console.error("❌ Registration error:", error);
+    console.error('Error code:', error.code);
+    
+    let errorMessage = error.message;
+    if (error.code === 'auth/email-already-in-use') {
+      errorMessage = 'This email is already registered';
+    } else if (error.code === 'auth/weak-password') {
+      errorMessage = 'Password should be at least 6 characters';
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = 'Invalid email address';
+    }
+    
+    return { success: false, error: errorMessage };
   }
 };
 
 export const registerAgentWithAuth = async (ownerId, agentName, email, password, phone, assignedVillages) => {
   try {
-    console.log("🔵 Starting agent registration for:", email);
+    console.log("📝 Starting agent registration for:", email);
+    
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
@@ -125,46 +211,47 @@ export const registerAgentWithAuth = async (ownerId, agentName, email, password,
       agentName,
       email: user.email,
       phone: phone || '',
-      assignedVillages,
+      assignedVillages: assignedVillages || [],
       role: 'agent',
       createdAt: serverTimestamp()
     };
     
     await setDoc(doc(db, 'agents', user.uid), agentData);
-    console.log("✅ Agent registered and saved to Firestore:", user.uid);
+    console.log("✅ Agent registered and saved to Firestore");
     
-    return { success: true, agent: agentData };
+    return { success: true, agent: { ...agentData, id: user.uid } };
+    
   } catch (error) {
-    console.error("Agent registration error:", error);
+    console.error("❌ Agent registration error:", error);
+    console.error('Error code:', error.code);
     return { success: false, error: error.message };
   }
 };
 
 export const loginUser = async (email, password) => {
   try {
-    console.log("🔵 Starting login for:", email);
+    console.log("📝 Starting login for:", email);
+    
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
     console.log("✅ Firebase Auth successful:", user.uid);
     
     // Try to find in owners first
-    const ownersQuery = query(collection(db, 'owners'), where('id', '==', user.uid));
-    const ownersSnapshot = await getDocs(ownersQuery);
+    const ownerDoc = await getDoc(doc(db, 'owners', user.uid));
     
-    if (!ownersSnapshot.empty) {
-      const ownerData = ownersSnapshot.docs[0].data();
-      console.log("✅ Owner data found in Firestore");
+    if (ownerDoc.exists()) {
+      const ownerData = { id: user.uid, ...ownerDoc.data() };
+      console.log("✅ Owner data found");
       return { success: true, user: ownerData, role: 'owner' };
     }
     
     // Try to find in agents
-    const agentsQuery = query(collection(db, 'agents'), where('id', '==', user.uid));
-    const agentsSnapshot = await getDocs(agentsQuery);
+    const agentDoc = await getDoc(doc(db, 'agents', user.uid));
     
-    if (!agentsSnapshot.empty) {
-      const agentData = agentsSnapshot.docs[0].data();
-      console.log("✅ Agent data found in Firestore");
+    if (agentDoc.exists()) {
+      const agentData = { id: user.uid, ...agentDoc.data() };
+      console.log("✅ Agent data found");
       return { success: true, user: agentData, role: 'agent' };
     }
     
@@ -172,16 +259,31 @@ export const loginUser = async (email, password) => {
     return { success: false, error: 'User account not found in database' };
     
   } catch (error) {
-    console.error("Login error:", error);
-    return { success: false, error: error.message };
+    console.error("❌ Login error:", error);
+    console.error('Error code:', error.code);
+    
+    let errorMessage = 'Login failed';
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+      errorMessage = 'Invalid email or password';
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = 'Invalid email address';
+    } else if (error.code === 'auth/too-many-requests') {
+      errorMessage = 'Too many failed attempts. Please try again later.';
+    } else {
+      errorMessage = error.message;
+    }
+    
+    return { success: false, error: errorMessage };
   }
 };
 
 export const logoutUser = async () => {
   try {
     await signOut(auth);
+    console.log("✅ Logged out successfully");
     return { success: true };
   } catch (error) {
+    console.error("❌ Logout error:", error);
     return { success: false, error: error.message };
   }
 };
@@ -189,9 +291,9 @@ export const logoutUser = async () => {
 // Demo data seeding
 export const seedDemoData = async (ownerId) => {
   try {
-    console.log("🔵 Seeding demo data for owner:", ownerId);
+    console.log("📝 Seeding demo data for owner:", ownerId);
     
-    // Check if villages already exist for this owner
+    // Check if villages already exist
     const existingVillages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
     if (existingVillages.length > 0) {
       console.log("✅ Demo data already exists");
@@ -199,85 +301,39 @@ export const seedDemoData = async (ownerId) => {
     }
     
     // Create demo villages
-    const villages = [
-      { villageName: 'Rampur', nextCustomerId: 801 },
-      { villageName: 'Sultanpur', nextCustomerId: 901 },
-      { villageName: 'Devgarh', nextCustomerId: 1001 }
-    ];
+    const village1 = await addToFirestore('villages', { 
+      ownerId, 
+      villageName: 'Rampur', 
+      nextCustomerId: 801 
+    });
     
-    const villagePromises = villages.map(village => 
-      addToFirestore('villages', { ...village, ownerId })
-    );
+    const village2 = await addToFirestore('villages', { 
+      ownerId, 
+      villageName: 'Sultanpur', 
+      nextCustomerId: 901 
+    });
     
     // Create demo products
-    const products = [
-      { productName: 'Mixer Grinder', price: 3500 },
-      { productName: 'Pressure Cooker', price: 1200 },
-      { productName: 'Electric Kettle', price: 900 },
-      { productName: 'Ceiling Fan', price: 2800 },
-      { productName: 'LED TV 32"', price: 12500 }
-    ];
+    await addToFirestore('products', { 
+      ownerId, 
+      productName: 'Mixer Grinder', 
+      price: 3500 
+    });
     
-    const productPromises = products.map(product => 
-      addToFirestore('products', { ...product, ownerId })
-    );
-    
-    // Create demo agent (Rajesh)
-    const agentData = {
-      ownerId,
-      agentName: 'Rajesh Mehta',
-      email: 'rajesh@demo.com',
-      phone: '9876543210',
-      assignedVillages: [], // Will be updated after villages are created
-      role: 'agent'
-    };
-    
-    // Wait for villages to be created first
-    await Promise.all(villagePromises);
-    await Promise.all(productPromises);
-    
-    // Get the created villages to assign to agent
-    const createdVillages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
-    const villageIds = createdVillages.map(v => v.id);
-    
-    // Update agent with assigned villages
-    agentData.assignedVillages = villageIds;
-    
-    // Register agent with auth
-    const agentRes = await registerAgentWithAuth(
-      ownerId,
-      agentData.agentName,
-      agentData.email,
-      'demo123',
-      agentData.phone,
-      agentData.assignedVillages
-    );
-    
-    if (!agentRes.success) {
-      throw new Error('Failed to create demo agent');
-    }
+    await addToFirestore('products', { 
+      ownerId, 
+      productName: 'Pressure Cooker', 
+      price: 1200 
+    });
     
     console.log("✅ Demo data seeded successfully");
-    return { success: true, message: 'Demo data seeded' };
+    return { success: true, message: 'Demo data created' };
     
   } catch (error) {
-    console.error("Error seeding demo data:", error);
+    console.error("❌ Error seeding demo data:", error);
     return { success: false, error: error.message };
   }
 };
 
-// Helper function to get all data for an owner
-export const getOwnerData = async (ownerId) => {
-  try {
-    const [villages, products, agents] = await Promise.all([
-      getFilteredFromFirestore('villages', 'ownerId', '==', ownerId),
-      getFilteredFromFirestore('products', 'ownerId', '==', ownerId),
-      getFilteredFromFirestore('agents', 'ownerId', '==', ownerId)
-    ]);
-    
-    return { villages, products, agents };
-  } catch (error) {
-    console.error("Error getting owner data:", error);
-    return { villages: [], products: [], agents: [] };
-  }
-};
+// Export auth and db for direct access if needed
+export { auth, db };
