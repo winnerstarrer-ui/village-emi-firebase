@@ -345,7 +345,7 @@ const Modal = ({ open, onClose, title, children }) => {
 // DATA SYNC HOOK - Ensures component always has latest Firestore data
 // ============================================================
 const useFirestoreData = (dataKey, filterField, filterValue) => {
-  const [data, setData] = useState([]);
+  const [data, setDataState] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -354,7 +354,7 @@ const useFirestoreData = (dataKey, filterField, filterValue) => {
     const loadData = async () => {
       if (!filterValue) {
         if (mounted) {
-          setData([]);
+          setDataState([]);
           setLoading(false);
         }
         return;
@@ -362,15 +362,16 @@ const useFirestoreData = (dataKey, filterField, filterValue) => {
 
       try {
         const result = await FB.getFilteredFromFirestore(dataKey, filterField, '==', filterValue);
+        const safeResult = Array.isArray(result) ? result : [];
         if (mounted) {
-          setData(result || []);
-          setData(dataKey, result || []);
+          setDataState(safeResult);
+          setData(dataKey, safeResult);
           setLoading(false);
         }
       } catch (error) {
         console.error(`Error loading ${dataKey}:`, error);
         if (mounted) {
-          setData([]);
+          setDataState([]);
           setLoading(false);
         }
       }
@@ -387,10 +388,12 @@ const useFirestoreData = (dataKey, filterField, filterValue) => {
     if (!filterValue) return;
     try {
       const result = await FB.getFilteredFromFirestore(dataKey, filterField, '==', filterValue);
-      setData(result || []);
-      setData(dataKey, result || []);
+      const safeResult = Array.isArray(result) ? result : [];
+      setDataState(safeResult);
+      setData(dataKey, safeResult);
     } catch (error) {
       console.error(`Error refreshing ${dataKey}:`, error);
+      setDataState([]);
     }
   }, [dataKey, filterField, filterValue]);
 
@@ -510,13 +513,19 @@ const OwnerDashboard = ({ user }) => {
   const sales = getData('sales') || [];
   const payments = getData('payments') || [];
 
-  const totalCustomers = customers.filter(c => sales.some(s => s.customerId === c.id && s.ownerId === user.id)).length;
-  const activeSales = sales.filter(s => s.ownerId === user.id && !s.completed);
+  const safeVillages = Array.isArray(villages) ? villages : [];
+  const safeAgents = Array.isArray(agents) ? agents : [];
+  const safeCustomers = Array.isArray(customers) ? customers : [];
+  const safeSales = Array.isArray(sales) ? sales : [];
+  const safePayments = Array.isArray(payments) ? payments : [];
+
+  const totalCustomers = safeCustomers.filter(c => safeSales.some(s => s.customerId === c.id && s.ownerId === user.id)).length;
+  const activeSales = safeSales.filter(s => s.ownerId === user.id && !s.completed);
   const totalOutstanding = activeSales.reduce((sum, s) => sum + (s.totalAmount - s.paidAmount), 0);
-  const todayPayments = payments.filter(p => p.ownerId === user.id && isToday(p.paymentDate));
+  const todayPayments = safePayments.filter(p => p.ownerId === user.id && isToday(p.paymentDate));
   const todayCollection = todayPayments.reduce((sum, p) => sum + p.amountCollected, 0);
 
-  const recentPayments = payments
+  const recentPayments = safePayments
     .filter(p => p.ownerId === user.id)
     .sort((a,b) => b.paymentDate - a.paymentDate)
     .slice(0, 10);
@@ -544,8 +553,8 @@ const OwnerDashboard = ({ user }) => {
         </div>
         <div className="stat-card blue">
           <div className="stat-label">Villages</div>
-          <div className="stat-value">{villages.length}</div>
-          <div className="stat-sub">{agents.length} agents</div>
+          <div className="stat-value">{safeVillages.length}</div>
+          <div className="stat-sub">{safeAgents.length} agents</div>
         </div>
       </div>
       <div className="card">
@@ -556,9 +565,9 @@ const OwnerDashboard = ({ user }) => {
           <p className="table-empty">No collections yet</p>
         ) : (
           recentPayments.map(p => {
-            const c = customers.find(ci => ci.id === p.customerId);
-            const v = villages.find(vi => vi.id === p.villageId);
-            const a = agents.find(ai => ai.id === p.agentId);
+            const c = safeCustomers.find(ci => ci.id === p.customerId);
+            const v = safeVillages.find(vi => vi.id === p.villageId);
+            const a = safeAgents.find(ai => ai.id === p.agentId);
             return (
               <div key={p.id} className="recent-item">
                 <div className="ri-left">
@@ -589,9 +598,10 @@ const VillageManagement = ({ user }) => {
   const [form, setForm] = useState({ villageName: '', startingId: 801 });
   const { toast, showToast } = useToast();
 
-  // Sync with Firestore data
+  // Sync with Firestore data - ensure it's always an array
   useEffect(() => {
-    setVillages(firestoreVillages);
+    const safeData = Array.isArray(firestoreVillages) ? firestoreVillages : [];
+    setVillages(safeData);
   }, [firestoreVillages]);
 
   const save = async () => {
@@ -603,7 +613,8 @@ const VillageManagement = ({ user }) => {
       if (!res.success) { showToast(res.error || 'Update failed', 'error'); return; }
       showToast('Village updated');
     } else {
-      if (villages.find(v => v.villageName.toLowerCase() === form.villageName.toLowerCase())) {
+      const safeVillages = Array.isArray(villages) ? villages : [];
+      if (safeVillages.find(v => v.villageName.toLowerCase() === form.villageName.toLowerCase())) {
         showToast('Village name already exists', 'error');
         return;
       }
@@ -632,6 +643,8 @@ const VillageManagement = ({ user }) => {
   };
 
   const customers = getData('customers') || [];
+  const safeVillages = Array.isArray(villages) ? villages : [];
+  const safeCustomers = Array.isArray(customers) ? customers : [];
 
   return (
     <div>
@@ -641,13 +654,13 @@ const VillageManagement = ({ user }) => {
         <button className="btn btn-primary" onClick={() => { setEditVillage(null); setForm({ villageName: '', startingId: 801 }); setModalOpen(true); }}>+ Add Village</button>
       </div>
       <div className="card">
-        {villages.length === 0 ? <p className="table-empty">No villages yet. Add your first village.</p> : (
+        {safeVillages.length === 0 ? <p className="table-empty">No villages yet. Add your first village.</p> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>#</th><th>Village Name</th><th>Customers</th><th>Next Cust ID</th><th>Actions</th></tr></thead>
               <tbody>
-                {villages.map((v, i) => {
-                  const custCount = customers.filter(c => c.villageId === v.id).length;
+                {safeVillages.map((v, i) => {
+                  const custCount = safeCustomers.filter(c => c.villageId === v.id).length;
                   return (
                     <tr key={v.id}>
                       <td style={{ color: '#64748b' }}>{i + 1}</td>
@@ -700,9 +713,10 @@ const AgentManagement = ({ user }) => {
   const [form, setForm] = useState({ agentName: '', email: '', password: '', phone: '', assignedVillages: [] });
   const { toast, showToast } = useToast();
 
-  // Sync with Firestore data
+  // Sync with Firestore data - ensure it's always an array
   useEffect(() => {
-    setAgents(firestoreAgents);
+    const safeData = Array.isArray(firestoreAgents) ? firestoreAgents : [];
+    setAgents(safeData);
   }, [firestoreAgents]);
 
   const toggleVillage = (vid) => {
@@ -726,7 +740,8 @@ const AgentManagement = ({ user }) => {
       showToast('Agent updated');
     } else {
       if (!form.password) { showToast('Set a password', 'error'); return; }
-      if (agents.find(a => a.email === form.email)) { showToast('Email already exists', 'error'); return; }
+      const safeAgents = Array.isArray(agents) ? agents : [];
+      if (safeAgents.find(a => a.email === form.email)) { showToast('Email already exists', 'error'); return; }
       const res = await FB.registerAgentWithAuth(user.id, form.agentName, form.email, form.password, form.phone, form.assignedVillages);
       if (!res.success) { showToast(res.error || 'Agent creation failed', 'error'); return; }
       showToast('Agent added');
@@ -746,6 +761,9 @@ const AgentManagement = ({ user }) => {
     await refreshAgents();
   };
 
+  const safeAgents = Array.isArray(agents) ? agents : [];
+  const safeVillages = Array.isArray(villages) ? villages : [];
+
   return (
     <div>
       <Toast toast={toast} />
@@ -754,32 +772,35 @@ const AgentManagement = ({ user }) => {
         <button className="btn btn-primary" onClick={() => { setEditAgent(null); setForm({ agentName: '', email: '', password: '', phone: '', assignedVillages: [] }); setModalOpen(true); }}>+ Add Agent</button>
       </div>
       <div className="card">
-        {agents.length === 0 ? <p className="table-empty">No agents yet.</p> : (
+        {safeAgents.length === 0 ? <p className="table-empty">No agents yet.</p> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>Agent Name</th><th>Email</th><th>Phone</th><th>Villages</th><th>Actions</th></tr></thead>
               <tbody>
-                {agents.map(a => (
-                  <tr key={a.id}>
-                    <td style={{ fontWeight: 600, color: '#e2e8f0' }}>{a.agentName}</td>
-                    <td style={{ color: '#64748b' }}>{a.email}</td>
-                    <td style={{ color: '#64748b' }}>{a.phone || '-'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {(a.assignedVillages || []).map(vid => {
-                          const v = villages.find(v => v.id === vid);
-                          return v ? <span key={vid} className="badge badge-active">{v.villageName}</span> : null;
-                        })}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn btn-outline btn-sm" onClick={() => { setEditAgent(a); setForm({ agentName: a.agentName, email: a.email, password: '', phone: a.phone || '', assignedVillages: a.assignedVillages || [] }); setModalOpen(true); }}>Edit</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => del(a.id)}>Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {safeAgents.map(a => {
+                  const agentVillages = Array.isArray(a.assignedVillages) ? a.assignedVillages : [];
+                  return (
+                    <tr key={a.id}>
+                      <td style={{ fontWeight: 600, color: '#e2e8f0' }}>{a.agentName}</td>
+                      <td style={{ color: '#64748b' }}>{a.email}</td>
+                      <td style={{ color: '#64748b' }}>{a.phone || '-'}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {agentVillages.map(vid => {
+                            const v = safeVillages.find(v => v.id === vid);
+                            return v ? <span key={vid} className="badge badge-active">{v.villageName}</span> : null;
+                          })}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button className="btn btn-outline btn-sm" onClick={() => { setEditAgent(a); setForm({ agentName: a.agentName, email: a.email, password: '', phone: a.phone || '', assignedVillages: agentVillages }); setModalOpen(true); }}>Edit</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => del(a.id)}>Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -809,7 +830,7 @@ const AgentManagement = ({ user }) => {
         <div className="input-group">
           <label className="input-label">Assign Villages</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
-            {villages.map(v => (
+            {safeVillages.map(v => (
               <div key={v.id} className={`village-chip ${form.assignedVillages.includes(v.id) ? 'selected' : ''}`} onClick={() => toggleVillage(v.id)}>{v.villageName}</div>
             ))}
           </div>
@@ -834,9 +855,10 @@ const ProductManagement = ({ user }) => {
   const [form, setForm] = useState({ productName: '', price: '' });
   const { toast, showToast } = useToast();
 
-  // Sync with Firestore data
+  // Sync with Firestore data - ensure it's always an array
   useEffect(() => {
-    setProducts(firestoreProducts);
+    const safeData = Array.isArray(firestoreProducts) ? firestoreProducts : [];
+    setProducts(safeData);
   }, [firestoreProducts]);
 
   const save = async () => {
@@ -875,6 +897,8 @@ const ProductManagement = ({ user }) => {
     await refreshData();
   };
 
+  const safeProducts = Array.isArray(products) ? products : [];
+
   return (
     <div>
       <Toast toast={toast} />
@@ -883,12 +907,12 @@ const ProductManagement = ({ user }) => {
         <button className="btn btn-primary" onClick={() => { setEditProduct(null); setForm({ productName: '', price: '' }); setModalOpen(true); }}>+ Add Product</button>
       </div>
       <div className="card">
-        {products.length === 0 ? <p className="table-empty">No products yet.</p> : (
+        {safeProducts.length === 0 ? <p className="table-empty">No products yet.</p> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>#</th><th>Product Name</th><th>Price</th><th>Actions</th></tr></thead>
               <tbody>
-                {products.map((p, i) => (
+                {safeProducts.map((p, i) => (
                   <tr key={p.id}>
                     <td style={{ color: '#64748b' }}>{i + 1}</td>
                     <td style={{ fontWeight: 600, color: '#e2e8f0' }}>{p.productName}</td>
@@ -961,11 +985,20 @@ export default function App() {
           FB.getFilteredFromFirestore('agents', 'ownerId', '==', user.id)
         ]);
         
-        setData('villages', vs);
-        setData('products', ps);
-        setData('agents', as);
+        // Ensure all results are arrays before setting
+        const safeVillages = Array.isArray(vs) ? vs : [];
+        const safeProducts = Array.isArray(ps) ? ps : [];
+        const safeAgents = Array.isArray(as) ? as : [];
+        
+        setData('villages', safeVillages);
+        setData('products', safeProducts);
+        setData('agents', safeAgents);
       } catch (error) {
         console.error('Error loading data:', error);
+        // Set empty arrays on error
+        setData('villages', []);
+        setData('products', []);
+        setData('agents', []);
       }
     };
 
@@ -1000,6 +1033,7 @@ export default function App() {
   ];
 
   const nav = isOwner ? ownerNav : agentNav;
+  const safeNav = Array.isArray(nav) ? nav : [];
 
   const renderPage = () => {
     if (isOwner) {
@@ -1033,7 +1067,7 @@ export default function App() {
             <p>Manager</p>
           </div>
           <div className="sidebar-nav">
-            {nav.map(item => (
+            {safeNav.map(item => (
               <div key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={() => setPage(item.id)}>
                 <span className="nav-icon">{item.icon}</span>
                 <span>{item.label}</span>
@@ -1058,7 +1092,7 @@ export default function App() {
 
       <div className="mobile-nav">
         <div className="mobile-nav-items">
-          {nav.map(item => (
+          {safeNav.map(item => (
             <div key={item.id} className={`mobile-nav-item ${page === item.id ? 'active' : ''}`} onClick={() => setPage(item.id)}>
               <span className="m-icon">{item.icon}</span>
               <span>{item.label}</span>
