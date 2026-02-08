@@ -2041,4 +2041,4 @@ export default function App() {
           <div className="mobile-nav-item" onClick={handleLogout}>
             <span className="m-icon">🚪</span>
             <span>Logout</span>
-          </div>
+           </div></div></div></>);};
