@@ -32,7 +32,7 @@ const GlobalStyles = () => (
     .app-shell { display: flex; min-height: 100vh; }
     .sidebar { width: 240px; background: #141620; border-right: 1px solid #1e2130; padding: 20px 12px; display: flex; flex-direction: column; flex-shrink: 0; position: fixed; top: 0; left: 0; bottom: 0; overflow-y: auto; }
     .sidebar-logo { padding: 12px 16px 24px; }
-    .sidebar-logo h1 { font-family: 'Sora', sans-serif; font-size: 18px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+    .sidebar-logo h1 { font-family: 'Sora', sans-serif; font-size: 18px; font-weight: 700; color: #fff; letterSpacing: -0.5px; }
     .sidebar-logo p { font-size: 11px; color: #64748b; margin-top: 2px; }
     .sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: 2px; }
     .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; color: #94a3b8; font-size: 13px; font-weight: 500; transition: all 0.15s; }
@@ -60,7 +60,7 @@ const GlobalStyles = () => (
     .card { background: #1a1d27; border: 1px solid #1e2130; border-radius: 14px; padding: 20px; }
     .card-sm { padding: 16px; }
     .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-    .card-title { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .card-title { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letterSpacing: 0.5px; }
 
     /* Stats Grid */
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
@@ -70,8 +70,8 @@ const GlobalStyles = () => (
     .stat-card.green::before { background: #22c55e; }
     .stat-card.amber::before { background: #f59e0b; }
     .stat-card.red::before { background: #ef4444; }
-    .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; margin-bottom: 8px; }
-    .stat-value { font-family: 'Sora', sans-serif; font-size: 24px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+    .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; letterSpacing: 0.8px; font-weight: 600; margin-bottom: 8px; }
+    .stat-value { font-family: 'Sora', sans-serif; font-size: 24px; font-weight: 700; color: #fff; letterSpacing: -0.5px; }
     .stat-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
     .stat-sub .up { color: #22c55e; }
     .stat-sub .down { color: #ef4444; }
@@ -80,7 +80,7 @@ const GlobalStyles = () => (
     .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #1e2130; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     thead { background: #141620; }
-    th { text-align: left; padding: 12px 16px; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; border-bottom: 1px solid #1e2130; }
+    th { text-align: left; padding: 12px 16px; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letterSpacing: 0.5px; white-space: nowrap; border-bottom: 1px solid #1e2130; }
     td { padding: 12px 16px; border-bottom: 1px solid rgba(30,33,48,0.5); color: #cbd5e1; white-space: nowrap; }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: rgba(30,33,48,0.4); }
@@ -109,7 +109,7 @@ const GlobalStyles = () => (
 
     /* Inputs */
     .input-group { margin-bottom: 16px; }
-    .input-label { display: block; font-size: 12px; color: #94a3b8; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .input-label { display: block; font-size: 12px; color: #94a3b8; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letterSpacing: 0.5px; }
     .input { width: 100%; background: #141620; border: 1px solid #2a2d3a; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; transition: border-color 0.15s; }
     .input:focus { border-color: #6366f1; }
     .input::placeholder { color: #475569; }
@@ -196,7 +196,7 @@ const GlobalStyles = () => (
     .collect-btn:disabled { background: #2a2d3a; color: #64748b; box-shadow: none; transform: none; }
 
     .recent-list { margin-top: 28px; }
-    .recent-list h4 { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; font-weight: 600; }
+    .recent-list h4 { font-size: 12px; color: #64748b; text-transform: uppercase; letterSpacing: 0.5px; margin-bottom: 10px; font-weight: 600; }
     .recent-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(30,33,48,0.5); }
     .recent-item:last-child { border-bottom: none; }
     .recent-item .ri-left { display: flex; align-items: center; gap: 10px; }
@@ -1315,7 +1315,7 @@ const Reports = ({ user }) => {
         .subtitle { color: #666; font-size: 13px; margin-bottom: 20px; }
         .summary-box { background: #f0f4ff; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
         table { width: 100%; border-collapse: collapse; }
-        th { background: #1a1a2e; color: #fff; padding: 10px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        th { background: #1a1a2e; color: #fff; padding: 10px; text-align: left; font-size: 12px; text-transform: uppercase; letterSpacing: 0.5px; }
         td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
         .footer { margin-top: 30px; text-align: center; color: #999; font-size: 12px; }
         .print-btn { background: #1a1a2e; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; font-size: 15px; cursor: pointer; margin-bottom: 20px; }
@@ -1766,15 +1766,15 @@ const AgentFastCollect = ({ user }) => {
                 {/* Sale Info */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: 100, background: '#141620', borderRadius: 8, padding: '10px 14px' }}>
-                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letter-spacing: 0.5 }}>Product</div>
+                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterspacing: 0.5 }}>Product</div>
                     <div style={{ fontSize: 14, color: '#e2e8f0', fontWeight: 600, marginTop: 2 }}>{selectedSale.productName}</div>
                   </div>
                   <div style={{ flex: 1, minWidth: 100, background: '#141620', borderRadius: 8, padding: '10px 14px' }}>
-                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letter-spacing: 0.5 }}>Outstanding</div>
+                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Outstanding</div>
                     <div style={{ fontSize: 16, color: '#f59e0b', fontWeight: 700, marginTop: 2 }}>{fmt(selectedSale.outstandingAmount)}</div>
                   </div>
                   <div style={{ flex: 1, minWidth: 100, background: '#141620', borderRadius: 8, padding: '10px 14px' }}>
-                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letter-spacing: 0.5 }}>EMI</div>
+                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>EMI</div>
                     <div style={{ fontSize: 14, color: '#a78bfa', fontWeight: 600, marginTop: 2 }}>{fmt(selectedSale.emiAmount)}/{selectedSale.emiFrequency}</div>
                   </div>
                 </div>
