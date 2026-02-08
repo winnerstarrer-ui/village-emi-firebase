@@ -20,12 +20,12 @@ import {
 } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyD7Zn2N8k_ju1Z4crz8a8Uj7wKv5gJ4BpY",
+  apiKey: "AIzaSyBltf4ue-UxjmRNAYyxHFNXBtOe6bNyuI4",
   authDomain: "village-emi-manager.firebaseapp.com",
   projectId: "village-emi-manager",
   storageBucket: "village-emi-manager.firebasestorage.app",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdef1234567890abcdef"
+  messagingSenderId: "1011535673411",
+  appId: "1:1011535673411:web:4d20038e67e4ffe33abcf6"
 };
 
 const app = initializeApp(firebaseConfig);
