@@ -1,90 +1,49 @@
-// firebaseService.js - Complete Firebase Integration
-import { initializeApp, getApps, deleteApp } from "firebase/app";
+import { initializeApp } from "firebase/app";
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut 
+} from "firebase/auth";
 import { 
   getFirestore, 
   collection, 
   addDoc, 
-  getDocs, 
   updateDoc, 
   deleteDoc, 
   doc, 
   query, 
   where, 
-  onSnapshot,
+  getDocs, 
   setDoc,
-  getDoc
-} from 'firebase/firestore';
-import { 
-  getAuth, 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
-} from 'firebase/auth';
+  serverTimestamp 
+} from "firebase/firestore";
 
-// Firebase Configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBltf4ue-UxjmRNAYyxHFNXBtOe6bNyuI4",
+  apiKey: "AIzaSyD7Zn2N8k_ju1Z4crz8a8Uj7wKv5gJ4BpY",
   authDomain: "village-emi-manager.firebaseapp.com",
   projectId: "village-emi-manager",
   storageBucket: "village-emi-manager.firebasestorage.app",
-  messagingSenderId: "1011535673411",
-  appId: "1:1011535673411:web:4d20038e67e4ffe33abcf6"
+  messagingSenderId: "123456789012",
+  appId: "1:123456789012:web:abcdef1234567890abcdef"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
-export const auth = getAuth(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-// ============================================================
-// FIRESTORE CRUD OPERATIONS
-// ============================================================
-
+// Generic Firestore operations
 export const addToFirestore = async (collectionName, data) => {
   try {
     const docRef = await addDoc(collection(db, collectionName), {
       ...data,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     });
     return { success: true, id: docRef.id };
   } catch (error) {
-    if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
-      console.error(`❌ Permission Denied while adding to ${collectionName}:`, error);
-    } else {
-      console.error(`Error adding to ${collectionName}:`, error);
-    }
+    console.error(`Error adding to ${collectionName}:`, error);
     return { success: false, error: error.message };
-  }
-};
-
-export const getAllFromFirestore = async (collectionName) => {
-  try {
-    const querySnapshot = await getDocs(collection(db, collectionName));
-    const data = [];
-    querySnapshot.forEach((doc) => {
-      data.push({ id: doc.id, ...doc.data() });
-    });
-    return data;
-  } catch (error) {
-    console.error(`Error getting ${collectionName}:`, error);
-    return [];
-  }
-};
-
-export const getFilteredFromFirestore = async (collectionName, field, operator, value) => {
-  try {
-    const q = query(collection(db, collectionName), where(field, operator, value));
-    const querySnapshot = await getDocs(q);
-    const data = [];
-    querySnapshot.forEach((doc) => {
-      data.push({ id: doc.id, ...doc.data() });
-    });
-    return data;
-  } catch (error) {
-    console.error(`Error filtering ${collectionName}:`, error);
-    return [];
   }
 };
 
@@ -93,172 +52,128 @@ export const updateInFirestore = async (collectionName, docId, data) => {
     const docRef = doc(db, collectionName, docId);
     await updateDoc(docRef, {
       ...data,
-      updatedAt: Date.now()
+      updatedAt: serverTimestamp()
     });
     return { success: true };
   } catch (error) {
-    if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
-      console.error(`❌ Permission Denied while updating ${collectionName}:`, error);
-    } else {
-      console.error(`Error updating ${collectionName}:`, error);
-    }
+    console.error(`Error updating ${collectionName}/${docId}:`, error);
     return { success: false, error: error.message };
   }
 };
 
 export const deleteFromFirestore = async (collectionName, docId) => {
   try {
-    await deleteDoc(doc(db, collectionName, docId));
+    console.log(`Attempting to delete from ${collectionName}:`, docId);
+    const docRef = doc(db, collectionName, docId);
+    await deleteDoc(docRef);
+    console.log(`Successfully deleted from ${collectionName}:`, docId);
     return { success: true };
   } catch (error) {
-    if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
-      console.error(`❌ Permission Denied while deleting from ${collectionName}:`, error);
-    } else {
-      console.error(`Error deleting from ${collectionName}:`, error);
-    }
+    console.error(`Error deleting ${collectionName}/${docId}:`, error);
     return { success: false, error: error.message };
   }
 };
 
-export const listenToCollection = (collectionName, callback, filterField = null, filterValue = null) => {
+export const getFilteredFromFirestore = async (collectionName, field, operator, value) => {
   try {
-    let q;
-    if (filterField && filterValue) {
-      q = query(collection(db, collectionName), where(filterField, '==', filterValue));
-    } else {
-      q = collection(db, collectionName);
-    }
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const data = [];
-      querySnapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() });
-      });
-      callback(data);
-    }, (error) => {
-      console.error(`Error listening to ${collectionName}:`, error);
-      callback([]);
-    });
-    
-    return unsubscribe;
+    const q = query(collection(db, collectionName), where(field, operator, value));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
-    console.error(`Error setting up listener for ${collectionName}:`, error);
-    return () => {};
+    console.error(`Error fetching from ${collectionName}:`, error);
+    return [];
   }
 };
 
-// ============================================================
-// AUTHENTICATION OPERATIONS
-// ============================================================
-
+// Auth operations
 export const registerUser = async (email, password, userData) => {
   try {
-    console.log('🔵 Starting registration for:', email);
-    
+    console.log("🔵 Starting registration for:", email);
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-    console.log('✅ Firebase Auth user created:', user.uid);
     
+    // Store owner data in Firestore
     const ownerData = {
-      userId: user.uid,
+      id: user.uid,
       email: user.email,
-      businessName: userData.businessName,
       ownerName: userData.ownerName,
+      businessName: userData.businessName,
       phone: userData.phone || '',
       role: 'owner',
-      createdAt: Date.now()
+      createdAt: serverTimestamp()
     };
     
-    console.log('🔵 Saving to Firestore:', ownerData);
+    await setDoc(doc(db, 'owners', user.uid), ownerData);
+    console.log("✅ Owner registered and saved to Firestore:", user.uid);
     
-    try {
-      await setDoc(doc(db, 'owners', user.uid), ownerData);
-    } catch (writeError) {
-      if (writeError.code === 'permission-denied' || (writeError.message || '').toLowerCase().includes('permission')) {
-        console.error('❌ Permission Denied while writing owner profile:', writeError);
-      } else {
-        console.error('❌ Error writing owner profile:', writeError);
-      }
-      throw writeError;
-    }
-    console.log('✅ User data saved to Firestore');
-    
-    return { 
-      success: true, 
-      user: { 
-        id: user.uid, 
-        ...ownerData 
-      } 
-    };
-    
+    return { success: true, user: ownerData };
   } catch (error) {
-    console.error('❌ Registration error:', error);
-    let errorMessage = 'Registration failed';
+    console.error("Registration error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const registerAgentWithAuth = async (ownerId, agentName, email, password, phone, assignedVillages) => {
+  try {
+    console.log("🔵 Starting agent registration for:", email);
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
     
-    if (error.code === 'auth/email-already-in-use') {
-      errorMessage = 'Email already registered';
-    } else if (error.code === 'auth/weak-password') {
-      errorMessage = 'Password should be at least 6 characters';
-    } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Invalid email address';
-    } else {
-      errorMessage = error.message;
-    }
+    const agentData = {
+      id: user.uid,
+      ownerId,
+      agentName,
+      email: user.email,
+      phone: phone || '',
+      assignedVillages,
+      role: 'agent',
+      createdAt: serverTimestamp()
+    };
     
-    return { success: false, error: errorMessage };
+    await setDoc(doc(db, 'agents', user.uid), agentData);
+    console.log("✅ Agent registered and saved to Firestore:", user.uid);
+    
+    return { success: true, agent: agentData };
+  } catch (error) {
+    console.error("Agent registration error:", error);
+    return { success: false, error: error.message };
   }
 };
 
 export const loginUser = async (email, password) => {
   try {
-    console.log('🔵 Starting login for:', email);
-    
+    console.log("🔵 Starting login for:", email);
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-    console.log('✅ Firebase Auth successful:', user.uid);
     
-    const ownerDocRef = doc(db, 'owners', user.uid);
-    const ownerDoc = await getDoc(ownerDocRef);
+    console.log("✅ Firebase Auth successful:", user.uid);
     
-    if (ownerDoc.exists()) {
-      console.log('✅ Owner data found in Firestore');
-      const ownerData = { id: user.uid, ...ownerDoc.data() };
+    // Try to find in owners first
+    const ownersQuery = query(collection(db, 'owners'), where('id', '==', user.uid));
+    const ownersSnapshot = await getDocs(ownersQuery);
+    
+    if (!ownersSnapshot.empty) {
+      const ownerData = ownersSnapshot.docs[0].data();
+      console.log("✅ Owner data found in Firestore");
       return { success: true, user: ownerData, role: 'owner' };
     }
     
-    console.log('🔵 Not an owner, checking agents...');
+    // Try to find in agents
+    const agentsQuery = query(collection(db, 'agents'), where('id', '==', user.uid));
+    const agentsSnapshot = await getDocs(agentsQuery);
     
-    const agents = await getAllFromFirestore('agents');
-    const agent = agents.find(a => a.email === email);
-    
-    if (agent) {
-      console.log('✅ Agent data found');
-      return { success: true, user: agent, role: 'agent' };
+    if (!agentsSnapshot.empty) {
+      const agentData = agentsSnapshot.docs[0].data();
+      console.log("✅ Agent data found in Firestore");
+      return { success: true, user: agentData, role: 'agent' };
     }
     
-    console.error('❌ User authenticated but no data found in Firestore');
-    return { 
-      success: false, 
-      error: 'Auth successful, but no database profile found' 
-    };
+    console.log("❌ User not found in Firestore");
+    return { success: false, error: 'User account not found in database' };
     
   } catch (error) {
-    console.error('❌ Login error:', error);
-    let errorMessage = 'Invalid email or password';
-    
-    if (error.code === 'auth/user-not-found') {
-      errorMessage = 'No account found with this email';
-    } else if (error.code === 'auth/wrong-password') {
-      errorMessage = 'Incorrect password';
-    } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Invalid email address';
-    } else if (error.code === 'auth/too-many-requests') {
-      errorMessage = 'Too many failed attempts. Please try again later.';
-    } else {
-      errorMessage = error.message;
-    }
-    
-    return { success: false, error: errorMessage };
+    console.error("Login error:", error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -267,114 +182,102 @@ export const logoutUser = async () => {
     await signOut(auth);
     return { success: true };
   } catch (error) {
-    console.error('Logout error:', error);
     return { success: false, error: error.message };
   }
 };
 
-export const onAuthChange = (callback) => {
-  return onAuthStateChanged(auth, callback);
-};
-
-// ============================================================
-// HELPER FUNCTIONS
-// ============================================================
-
-export const generateId = () => {
-  return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-};
-
+// Demo data seeding
 export const seedDemoData = async (ownerId) => {
   try {
-    console.log('🔵 Seeding demo data for owner:', ownerId);
+    console.log("🔵 Seeding demo data for owner:", ownerId);
     
-    const villages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
-    if (villages.length > 0) {
-      console.log('✅ Demo data already exists');
-      return { success: true, message: 'Data already exists' };
+    // Check if villages already exist for this owner
+    const existingVillages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
+    if (existingVillages.length > 0) {
+      console.log("✅ Demo data already exists");
+      return { success: true, message: 'Demo data already exists' };
     }
     
-    await addToFirestore('villages', {
-      ownerId,
-      villageName: 'Rampur',
-      nextCustomerId: 805
-    });
+    // Create demo villages
+    const villages = [
+      { villageName: 'Rampur', nextCustomerId: 801 },
+      { villageName: 'Sultanpur', nextCustomerId: 901 },
+      { villageName: 'Devgarh', nextCustomerId: 1001 }
+    ];
     
-    await addToFirestore('villages', {
-      ownerId,
-      villageName: 'Sundarabad',
-      nextCustomerId: 803
-    });
+    const villagePromises = villages.map(village => 
+      addToFirestore('villages', { ...village, ownerId })
+    );
     
-    await addToFirestore('products', {
-      ownerId,
-      productName: 'Mixer Grinder',
-      price: 3500
-    });
+    // Create demo products
+    const products = [
+      { productName: 'Mixer Grinder', price: 3500 },
+      { productName: 'Pressure Cooker', price: 1200 },
+      { productName: 'Electric Kettle', price: 900 },
+      { productName: 'Ceiling Fan', price: 2800 },
+      { productName: 'LED TV 32"', price: 12500 }
+    ];
     
-    await addToFirestore('products', {
-      ownerId,
-      productName: 'Cooker (3L)',
-      price: 2800
-    });
+    const productPromises = products.map(product => 
+      addToFirestore('products', { ...product, ownerId })
+    );
     
-    console.log('✅ Demo data seeded successfully');
-    return { success: true, message: 'Demo data created' };
-  } catch (error) {
-    console.error('❌ Error seeding demo data:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const registerAgentWithAuth = async (ownerId, agentName, email, password, phone, assignedVillages) => {
-  try {
-    let secondaryApp;
-    try {
-      secondaryApp = getApps().find(a => a.name === 'secondary') || initializeApp(firebaseConfig, 'secondary');
-    } catch (_) {
-      secondaryApp = initializeApp(firebaseConfig, 'secondary');
-    }
-    const tempAuth = getAuth(secondaryApp);
-    const cred = await createUserWithEmailAndPassword(tempAuth, email, password);
-    const agentUid = cred.user.uid;
+    // Create demo agent (Rajesh)
     const agentData = {
-      id: agentUid,
       ownerId,
-      agentName,
-      email,
-      phone: phone || '',
-      assignedVillages: assignedVillages || [],
-      role: 'agent',
-      createdAt: Date.now()
+      agentName: 'Rajesh Mehta',
+      email: 'rajesh@demo.com',
+      phone: '9876543210',
+      assignedVillages: [], // Will be updated after villages are created
+      role: 'agent'
     };
-    await setDoc(doc(db, 'agents', agentUid), agentData);
-    try { await signOut(tempAuth); } catch (_) {}
-    try { await deleteApp(secondaryApp); } catch (_) {}
-    return { success: true, agent: agentData };
-  } catch (error) {
-    if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
-      console.error('❌ Permission Denied during agent registration:', error);
-    } else {
-      console.error('❌ Agent registration error:', error);
+    
+    // Wait for villages to be created first
+    await Promise.all(villagePromises);
+    await Promise.all(productPromises);
+    
+    // Get the created villages to assign to agent
+    const createdVillages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
+    const villageIds = createdVillages.map(v => v.id);
+    
+    // Update agent with assigned villages
+    agentData.assignedVillages = villageIds;
+    
+    // Register agent with auth
+    const agentRes = await registerAgentWithAuth(
+      ownerId,
+      agentData.agentName,
+      agentData.email,
+      'demo123',
+      agentData.phone,
+      agentData.assignedVillages
+    );
+    
+    if (!agentRes.success) {
+      throw new Error('Failed to create demo agent');
     }
+    
+    console.log("✅ Demo data seeded successfully");
+    return { success: true, message: 'Demo data seeded' };
+    
+  } catch (error) {
+    console.error("Error seeding demo data:", error);
     return { success: false, error: error.message };
   }
 };
 
-export default {
-  db,
-  auth,
-  addToFirestore,
-  getAllFromFirestore,
-  getFilteredFromFirestore,
-  updateInFirestore,
-  deleteFromFirestore,
-  listenToCollection,
-  registerUser,
-  loginUser,
-  logoutUser,
-  onAuthChange,
-  generateId,
-  seedDemoData,
-  registerAgentWithAuth
+// Helper function to get all data for an owner
+export const getOwnerData = async (ownerId) => {
+  try {
+    const [villages, products, agents] = await Promise.all([
+      getFilteredFromFirestore('villages', 'ownerId', '==', ownerId),
+      getFilteredFromFirestore('products', 'ownerId', '==', ownerId),
+      getFilteredFromFirestore('agents', 'ownerId', '==', ownerId)
+    ]);
+    
+    return { villages, products, agents };
+  } catch (error) {
+    console.error("Error getting owner data:", error);
+    return { villages: [], products: [], agents: [] };
+  }
 };
