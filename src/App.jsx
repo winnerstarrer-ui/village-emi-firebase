@@ -252,7 +252,18 @@ const getLS = (key) => {
 };
 const setLS = (key, val) => {
   _memStore[key] = JSON.parse(JSON.stringify(val));
-  if (key !== STORAGE_KEYS.CURRENT_USER) {
+  // Don't sync CURRENT_USER, VILLAGES, AGENTS, PRODUCTS, CUSTOMERS, SALES, PAYMENTS to app_state
+  // These are stored in their own Firestore collections
+  const excludedKeys = [
+    STORAGE_KEYS.CURRENT_USER,
+    STORAGE_KEYS.VILLAGES,
+    STORAGE_KEYS.AGENTS,
+    STORAGE_KEYS.PRODUCTS,
+    STORAGE_KEYS.CUSTOMERS,
+    STORAGE_KEYS.SALES,
+    STORAGE_KEYS.PAYMENTS
+  ];
+  if (!excludedKeys.includes(key)) {
     const owner = _memStore[STORAGE_KEYS.CURRENT_USER] || null;
     const ownerId = owner && owner.id ? owner.id : null;
     const payload = { key, ownerId, data: JSON.parse(JSON.stringify(val)), updatedAt: Date.now() };
@@ -1958,14 +1969,20 @@ export default function App() {
   useEffect(() => {
     if (!user || !user.id) return;
     (async () => {
-      const [vs, ps, as] = await Promise.all([
+      const [vs, ps, as, cs, ss, pys] = await Promise.all([
         FB.getFilteredFromFirestore('villages','ownerId','==',user.id),
         FB.getFilteredFromFirestore('products','ownerId','==',user.id),
-        FB.getFilteredFromFirestore('agents','ownerId','==',user.id)
+        FB.getFilteredFromFirestore('agents','ownerId','==',user.id),
+        FB.getFilteredFromFirestore('customers','ownerId','==',user.id),
+        FB.getFilteredFromFirestore('sales','ownerId','==',user.id),
+        FB.getFilteredFromFirestore('payments','ownerId','==',user.id)
       ]);
       setLS(STORAGE_KEYS.VILLAGES, vs.map(v => ({ id: v.id, ...v })));
       setLS(STORAGE_KEYS.PRODUCTS, ps.map(p => ({ id: p.id, ...p })));
       setLS(STORAGE_KEYS.AGENTS, as.map(a => ({ id: a.id, ...a })));
+      setLS(STORAGE_KEYS.CUSTOMERS, cs.map(c => ({ id: c.id, ...c })));
+      setLS(STORAGE_KEYS.SALES, ss.map(s => ({ id: s.id, ...s })));
+      setLS(STORAGE_KEYS.PAYMENTS, pys.map(p => ({ id: p.id, ...p })));
     })();
   }, [user && user.id]);
 
