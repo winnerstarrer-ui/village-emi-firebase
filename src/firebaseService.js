@@ -51,7 +51,7 @@ export const addToFirestore = async (collectionName, data) => {
     return { success: true, id: docRef.id };
   } catch (error) {
     if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
-      console.error(`⛔ Permission Denied while adding to ${collectionName}:`, error);
+      console.error(`❌ Permission Denied while adding to ${collectionName}:`, error);
     } else {
       console.error(`Error adding to ${collectionName}:`, error);
     }
@@ -78,8 +78,8 @@ export const getFilteredFromFirestore = async (collectionName, field, operator, 
     const q = query(collection(db, collectionName), where(field, operator, value));
     const querySnapshot = await getDocs(q);
     const data = [];
-    querySnapshot.forEach((document) => {
-      data.push({ id: document.id, ...document.data() });
+    querySnapshot.forEach((doc) => {
+      data.push({ id: doc.id, ...doc.data() });
     });
     return data;
   } catch (error) {
@@ -98,7 +98,7 @@ export const updateInFirestore = async (collectionName, docId, data) => {
     return { success: true };
   } catch (error) {
     if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
-      console.error(`⛔ Permission Denied while updating ${collectionName}:`, error);
+      console.error(`❌ Permission Denied while updating ${collectionName}:`, error);
     } else {
       console.error(`Error updating ${collectionName}:`, error);
     }
@@ -112,7 +112,7 @@ export const deleteFromFirestore = async (collectionName, docId) => {
     return { success: true };
   } catch (error) {
     if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
-      console.error(`⛔ Permission Denied while deleting from ${collectionName}:`, error);
+      console.error(`❌ Permission Denied while deleting from ${collectionName}:`, error);
     } else {
       console.error(`Error deleting from ${collectionName}:`, error);
     }
@@ -175,9 +175,9 @@ export const registerUser = async (email, password, userData) => {
       await setDoc(doc(db, 'owners', user.uid), ownerData);
     } catch (writeError) {
       if (writeError.code === 'permission-denied' || (writeError.message || '').toLowerCase().includes('permission')) {
-        console.error('⛔ Permission Denied while writing owner profile:', writeError);
+        console.error('❌ Permission Denied while writing owner profile:', writeError);
       } else {
-        console.error('⛔ Error writing owner profile:', writeError);
+        console.error('❌ Error writing owner profile:', writeError);
       }
       throw writeError;
     }
@@ -192,7 +192,7 @@ export const registerUser = async (email, password, userData) => {
     };
     
   } catch (error) {
-    console.error('⛔ Registration error:', error);
+    console.error('❌ Registration error:', error);
     let errorMessage = 'Registration failed';
     
     if (error.code === 'auth/email-already-in-use') {
@@ -236,14 +236,14 @@ export const loginUser = async (email, password) => {
       return { success: true, user: agent, role: 'agent' };
     }
     
-    console.error('⛔ User authenticated but no data found in Firestore');
+    console.error('❌ User authenticated but no data found in Firestore');
     return { 
       success: false, 
       error: 'Auth successful, but no database profile found' 
     };
     
   } catch (error) {
-    console.error('⛔ Login error:', error);
+    console.error('❌ Login error:', error);
     let errorMessage = 'Invalid email or password';
     
     if (error.code === 'auth/user-not-found') {
@@ -321,7 +321,7 @@ export const seedDemoData = async (ownerId) => {
     console.log('✅ Demo data seeded successfully');
     return { success: true, message: 'Demo data created' };
   } catch (error) {
-    console.error('⛔ Error seeding demo data:', error);
+    console.error('❌ Error seeding demo data:', error);
     return { success: false, error: error.message };
   }
 };
@@ -353,9 +353,9 @@ export const registerAgentWithAuth = async (ownerId, agentName, email, password,
     return { success: true, agent: agentData };
   } catch (error) {
     if (error.code === 'permission-denied' || (error.message || '').toLowerCase().includes('permission')) {
-      console.error('⛔ Permission Denied during agent registration:', error);
+      console.error('❌ Permission Denied during agent registration:', error);
     } else {
-      console.error('⛔ Agent registration error:', error);
+      console.error('❌ Agent registration error:', error);
     }
     return { success: false, error: error.message };
   }
