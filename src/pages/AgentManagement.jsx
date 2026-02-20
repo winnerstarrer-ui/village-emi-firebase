@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import * as FB from './firebaseService';
-import { STORAGE_KEYS, getLS, setLS } from './storage';
-import { useToast } from './hooks';
-import { Toast, Modal } from './components/Common';
+import * as FB from '../firebaseService';
+import { STORAGE_KEYS, getLS, setLS } from '../storage';
+import { useToast } from '../hooks';
+import { Toast, Modal } from '../components/Common';
 
 // ============================================================
 // AGENT MANAGEMENT

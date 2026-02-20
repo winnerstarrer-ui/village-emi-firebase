@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import * as FB from './firebaseService';
-import { STORAGE_KEYS, getLS, setLS } from './storage';
-import { uid } from './utils';
-import { useToast } from './hooks';
-import { Toast } from './components/Common';
-import { Modal } from './components/Common';
+import * as FB from '../firebaseService';
+import { STORAGE_KEYS, getLS, setLS } from '../storage';
+import { uid } from '../utils';
+import { useToast } from '../hooks';
+import { Toast } from '../components/Common';
+import { Modal } from '../components/Common';
 
 // ============================================================
 // VILLAGE MANAGEMENT

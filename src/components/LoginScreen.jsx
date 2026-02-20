@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import * as FB from './firebaseService';
-import { STORAGE_KEYS, setLS } from './storage';
+import * as FB from '../firebaseService';
+import { STORAGE_KEYS, setLS } from '../storage';
 
 // ============================================================
 // LOGIN SCREEN
