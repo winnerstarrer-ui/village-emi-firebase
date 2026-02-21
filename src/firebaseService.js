@@ -16,8 +16,10 @@ import {
   where, 
   getDocs, 
   setDoc,
-  serverTimestamp 
+  serverTimestamp,
+  enableIndexedDbPersistence
 } from "firebase/firestore";
+import bcrypt from 'bcryptjs';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBltf4ue-UxjmRNAYyxHFNXBtOe6bNyuI4",
@@ -31,6 +33,15 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Enable offline persistence (for web)
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code == 'failed-precondition') {
+    console.log('Persistence failed: multiple tabs open');
+  } else if (err.code == 'unimplemented') {
+    console.log('Persistence not supported');
+  }
+});
 
 // Generic Firestore operations
 export const addToFirestore = async (collectionName, data) => {
@@ -85,14 +96,14 @@ export const getFilteredFromFirestore = async (collectionName, field, operator, 
   }
 };
 
-// Auth operations
+// ========== OWNER AUTH (unchanged) ==========
+
 export const registerUser = async (email, password, userData) => {
   try {
     console.log("🔵 Starting registration for:", email);
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    // Store owner data in Firestore
     const ownerData = {
       id: user.uid,
       email: user.email,
@@ -113,33 +124,6 @@ export const registerUser = async (email, password, userData) => {
   }
 };
 
-export const registerAgentWithAuth = async (ownerId, agentName, email, password, phone, assignedVillages) => {
-  try {
-    console.log("🔵 Starting agent registration for:", email);
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    
-    const agentData = {
-      id: user.uid,
-      ownerId,
-      agentName,
-      email: user.email,
-      phone: phone || '',
-      assignedVillages,
-      role: 'agent',
-      createdAt: serverTimestamp()
-    };
-    
-    await setDoc(doc(db, 'agents', user.uid), agentData);
-    console.log("✅ Agent registered and saved to Firestore:", user.uid);
-    
-    return { success: true, agent: agentData };
-  } catch (error) {
-    console.error("Agent registration error:", error);
-    return { success: false, error: error.message };
-  }
-};
-
 export const loginUser = async (email, password) => {
   try {
     console.log("🔵 Starting login for:", email);
@@ -148,7 +132,6 @@ export const loginUser = async (email, password) => {
     
     console.log("✅ Firebase Auth successful:", user.uid);
     
-    // Try to find in owners first
     const ownersQuery = query(collection(db, 'owners'), where('id', '==', user.uid));
     const ownersSnapshot = await getDocs(ownersQuery);
     
@@ -158,7 +141,6 @@ export const loginUser = async (email, password) => {
       return { success: true, user: ownerData, role: 'owner' };
     }
     
-    // Try to find in agents
     const agentsQuery = query(collection(db, 'agents'), where('id', '==', user.uid));
     const agentsSnapshot = await getDocs(agentsQuery);
     
@@ -186,19 +168,83 @@ export const logoutUser = async () => {
   }
 };
 
-// Demo data seeding
+// ========== AGENT MANAGEMENT (NO FIREBASE AUTH) ==========
+
+// Register a new agent (owner creates)
+export const registerAgent = async (ownerId, agentName, phone, pin, assignedVillages) => {
+  try {
+    // Check if phone already exists for this owner
+    const existing = await getFilteredFromFirestore('agents', 'phone', '==', phone);
+    if (existing.length > 0) {
+      return { success: false, error: 'Phone number already used' };
+    }
+
+    const hashedPin = await bcrypt.hash(pin, 10);
+    const agentData = {
+      ownerId,
+      agentName,
+      phone,
+      pin: hashedPin,
+      assignedVillages,
+      role: 'agent',
+      createdAt: serverTimestamp()
+    };
+    const docRef = await addDoc(collection(db, 'agents'), agentData);
+    const newAgent = { id: docRef.id, ...agentData, pin: undefined }; // don't return pin
+    return { success: true, agent: newAgent };
+  } catch (error) {
+    console.error('Error registering agent:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Update agent PIN (owner can change)
+export const updateAgentPin = async (agentId, newPin) => {
+  try {
+    const hashedPin = await bcrypt.hash(newPin, 10);
+    const docRef = doc(db, 'agents', agentId);
+    await updateDoc(docRef, { pin: hashedPin, updatedAt: serverTimestamp() });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Verify agent login (phone + pin)
+export const verifyAgentLogin = async (phone, pin) => {
+  try {
+    const q = query(collection(db, 'agents'), where('phone', '==', phone));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return { success: false, error: 'Agent not found' };
+    }
+    const agentDoc = snapshot.docs[0];
+    const agentData = agentDoc.data();
+    const match = await bcrypt.compare(pin, agentData.pin);
+    if (!match) {
+      return { success: false, error: 'Invalid PIN' };
+    }
+    // Return agent without pin
+    const { pin: _, ...safeAgent } = agentData;
+    safeAgent.id = agentDoc.id;
+    safeAgent.role = 'agent';
+    return { success: true, user: safeAgent };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Demo data seeding (unchanged)
 export const seedDemoData = async (ownerId) => {
   try {
     console.log("🔵 Seeding demo data for owner:", ownerId);
     
-    // Check if villages already exist for this owner
     const existingVillages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
     if (existingVillages.length > 0) {
       console.log("✅ Demo data already exists");
       return { success: true, message: 'Demo data already exists' };
     }
     
-    // Create demo villages
     const villages = [
       { villageName: 'Rampur', nextCustomerId: 801 },
       { villageName: 'Sultanpur', nextCustomerId: 901 },
@@ -209,7 +255,6 @@ export const seedDemoData = async (ownerId) => {
       addToFirestore('villages', { ...village, ownerId })
     );
     
-    // Create demo products
     const products = [
       { productName: 'Mixer Grinder', price: 3500 },
       { productName: 'Pressure Cooker', price: 1200 },
@@ -222,34 +267,28 @@ export const seedDemoData = async (ownerId) => {
       addToFirestore('products', { ...product, ownerId })
     );
     
-    // Create demo agent (Rajesh)
+    // Create demo agent (Rajesh) – now using phone/PIN
     const agentData = {
       ownerId,
       agentName: 'Rajesh Mehta',
-      email: 'rajesh@demo.com',
       phone: '9876543210',
       assignedVillages: [], // Will be updated after villages are created
       role: 'agent'
     };
     
-    // Wait for villages to be created first
     await Promise.all(villagePromises);
     await Promise.all(productPromises);
     
-    // Get the created villages to assign to agent
     const createdVillages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
     const villageIds = createdVillages.map(v => v.id);
-    
-    // Update agent with assigned villages
     agentData.assignedVillages = villageIds;
     
-    // Register agent with auth
-    const agentRes = await registerAgentWithAuth(
+    // Register agent with phone and PIN (demo PIN = '1234')
+    const agentRes = await registerAgent(
       ownerId,
       agentData.agentName,
-      agentData.email,
-      'demo123',
       agentData.phone,
+      '1234',
       agentData.assignedVillages
     );
     
