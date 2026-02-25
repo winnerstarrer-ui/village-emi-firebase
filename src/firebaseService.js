@@ -16,6 +16,7 @@ import {
   where, 
   getDocs, 
   setDoc,
+  getDoc,               // <-- added for direct fetch
   serverTimestamp,
   enableIndexedDbPersistence
 } from "firebase/firestore";
@@ -43,7 +44,7 @@ enableIndexedDbPersistence(db).catch((err) => {
 });
 
 // ============================================================
-// GENERIC FIRESTORE OPERATIONS (unchanged)
+// GENERIC FIRESTORE OPERATIONS
 // ============================================================
 export const addToFirestore = async (collectionName, data) => {
   try {
@@ -163,10 +164,10 @@ export const logoutUser = async () => {
 // Register a new agent (owner creates)
 export const registerAgent = async (ownerId, agentName, phone, pin, assignedVillages) => {
   try {
-    // Check if phone already exists (by querying agents collection)
+    // Check if phone already exists in Firestore (optional but good)
     const existing = await getFilteredFromFirestore('agents', 'phone', '==', phone);
     if (existing.length > 0) {
-      return { success: false, error: 'Phone number already used' };
+      return { success: false, error: 'An agent with this phone number already exists.' };
     }
 
     // Create Firebase Auth user with email = phone@agent.local
@@ -174,7 +175,7 @@ export const registerAgent = async (ownerId, agentName, phone, pin, assignedVill
     const userCredential = await createUserWithEmailAndPassword(auth, email, pin);
     const uid = userCredential.user.uid;
 
-    // Store agent in Firestore with same UID
+    // Store agent in Firestore with the same UID as document ID
     const agentData = {
       ownerId,
       agentName,
@@ -188,7 +189,9 @@ export const registerAgent = async (ownerId, agentName, phone, pin, assignedVill
     // Return agent without pin
     return { success: true, agent: { id: uid, ...agentData } };
   } catch (error) {
-    console.error('Error registering agent:', error);
+    if (error.code === 'auth/email-already-in-use') {
+      return { success: false, error: 'This phone number is already registered. Use a different number or delete the existing agent first.' };
+    }
     return { success: false, error: error.message };
   }
 };
@@ -200,13 +203,16 @@ export const agentLogin = async (phone, pin) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, pin);
     const uid = userCredential.user.uid;
 
-    // Fetch agent document from Firestore
-    const agentDoc = await getDocs(query(collection(db, 'agents'), where('id', '==', uid)));
-    if (agentDoc.empty) {
+    // Fetch agent document directly by UID (document ID = uid)
+    const agentDocRef = doc(db, 'agents', uid);
+    const agentDocSnap = await getDoc(agentDocRef);
+
+    if (!agentDocSnap.exists()) {
       return { success: false, error: 'Agent data not found' };
     }
-    const agentData = agentDoc.docs[0].data();
-    agentData.id = uid;
+
+    const agentData = agentDocSnap.data();
+    agentData.id = uid; // add ID to the returned object
     return { success: true, user: agentData };
   } catch (error) {
     console.error('Agent login error:', error);
@@ -215,7 +221,7 @@ export const agentLogin = async (phone, pin) => {
 };
 
 // ============================================================
-// DEMO DATA SEEDING (updated to use new registerAgent)
+// DEMO DATA SEEDING
 // ============================================================
 export const seedDemoData = async (ownerId) => {
   try {

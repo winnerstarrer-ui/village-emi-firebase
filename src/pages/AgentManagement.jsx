@@ -23,7 +23,7 @@ export const AgentManagement = ({ user }) => {
     if (!form.agentName.trim() || !form.phone.trim()) { showToast('Fill required fields', 'error'); return; }
     let all = getLS(STORAGE_KEYS.AGENTS) || [];
     if (editAgent) {
-      // Update only name and villages (phone cannot be changed, PIN cannot be changed without backend)
+      // Update only name and villages (phone cannot be changed)
       all = all.map(a => a.id === editAgent.id ? { ...a, agentName: form.agentName, assignedVillages: form.assignedVillages } : a);
       setLS(STORAGE_KEYS.AGENTS, all);
       setAgents(all.filter(a => a.ownerId === user.id));
