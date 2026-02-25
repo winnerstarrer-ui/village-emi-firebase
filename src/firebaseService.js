@@ -19,7 +19,6 @@ import {
   serverTimestamp,
   enableIndexedDbPersistence
 } from "firebase/firestore";
-import bcrypt from 'bcryptjs';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBltf4ue-UxjmRNAYyxHFNXBtOe6bNyuI4",
@@ -34,7 +33,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Enable offline persistence (for web)
+// Enable offline persistence
 enableIndexedDbPersistence(db).catch((err) => {
   if (err.code == 'failed-precondition') {
     console.log('Persistence failed: multiple tabs open');
@@ -43,7 +42,9 @@ enableIndexedDbPersistence(db).catch((err) => {
   }
 });
 
-// Generic Firestore operations
+// ============================================================
+// GENERIC FIRESTORE OPERATIONS (unchanged)
+// ============================================================
 export const addToFirestore = async (collectionName, data) => {
   try {
     const docRef = await addDoc(collection(db, collectionName), {
@@ -74,10 +75,8 @@ export const updateInFirestore = async (collectionName, docId, data) => {
 
 export const deleteFromFirestore = async (collectionName, docId) => {
   try {
-    console.log(`Attempting to delete from ${collectionName}:`, docId);
     const docRef = doc(db, collectionName, docId);
     await deleteDoc(docRef);
-    console.log(`Successfully deleted from ${collectionName}:`, docId);
     return { success: true };
   } catch (error) {
     console.error(`Error deleting ${collectionName}/${docId}:`, error);
@@ -96,11 +95,11 @@ export const getFilteredFromFirestore = async (collectionName, field, operator, 
   }
 };
 
-// ========== OWNER AUTH (unchanged) ==========
-
+// ============================================================
+// OWNER AUTH (unchanged)
+// ============================================================
 export const registerUser = async (email, password, userData) => {
   try {
-    console.log("🔵 Starting registration for:", email);
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
@@ -115,46 +114,35 @@ export const registerUser = async (email, password, userData) => {
     };
     
     await setDoc(doc(db, 'owners', user.uid), ownerData);
-    console.log("✅ Owner registered and saved to Firestore:", user.uid);
-    
     return { success: true, user: ownerData };
   } catch (error) {
-    console.error("Registration error:", error);
     return { success: false, error: error.message };
   }
 };
 
 export const loginUser = async (email, password) => {
   try {
-    console.log("🔵 Starting login for:", email);
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    console.log("✅ Firebase Auth successful:", user.uid);
-    
+    // Try owners first
     const ownersQuery = query(collection(db, 'owners'), where('id', '==', user.uid));
     const ownersSnapshot = await getDocs(ownersQuery);
-    
     if (!ownersSnapshot.empty) {
       const ownerData = ownersSnapshot.docs[0].data();
-      console.log("✅ Owner data found in Firestore");
       return { success: true, user: ownerData, role: 'owner' };
     }
     
+    // Then agents
     const agentsQuery = query(collection(db, 'agents'), where('id', '==', user.uid));
     const agentsSnapshot = await getDocs(agentsQuery);
-    
     if (!agentsSnapshot.empty) {
       const agentData = agentsSnapshot.docs[0].data();
-      console.log("✅ Agent data found in Firestore");
       return { success: true, user: agentData, role: 'agent' };
     }
     
-    console.log("❌ User not found in Firestore");
     return { success: false, error: 'User account not found in database' };
-    
   } catch (error) {
-    console.error("Login error:", error);
     return { success: false, error: error.message };
   }
 };
@@ -168,80 +156,71 @@ export const logoutUser = async () => {
   }
 };
 
-// ========== AGENT MANAGEMENT (NO FIREBASE AUTH) ==========
+// ============================================================
+// AGENT MANAGEMENT (with Firebase Auth)
+// ============================================================
 
 // Register a new agent (owner creates)
 export const registerAgent = async (ownerId, agentName, phone, pin, assignedVillages) => {
   try {
-    // Check if phone already exists for this owner
+    // Check if phone already exists (by querying agents collection)
     const existing = await getFilteredFromFirestore('agents', 'phone', '==', phone);
     if (existing.length > 0) {
       return { success: false, error: 'Phone number already used' };
     }
 
-    const hashedPin = await bcrypt.hash(pin, 10);
+    // Create Firebase Auth user with email = phone@agent.local
+    const email = `${phone}@agent.local`;
+    const userCredential = await createUserWithEmailAndPassword(auth, email, pin);
+    const uid = userCredential.user.uid;
+
+    // Store agent in Firestore with same UID
     const agentData = {
       ownerId,
       agentName,
       phone,
-      pin: hashedPin,
       assignedVillages,
       role: 'agent',
       createdAt: serverTimestamp()
     };
-    const docRef = await addDoc(collection(db, 'agents'), agentData);
-    const newAgent = { id: docRef.id, ...agentData, pin: undefined }; // don't return pin
-    return { success: true, agent: newAgent };
+    await setDoc(doc(db, 'agents', uid), agentData);
+
+    // Return agent without pin
+    return { success: true, agent: { id: uid, ...agentData } };
   } catch (error) {
     console.error('Error registering agent:', error);
     return { success: false, error: error.message };
   }
 };
 
-// Update agent PIN (owner can change)
-export const updateAgentPin = async (agentId, newPin) => {
+// Agent login with phone + pin
+export const agentLogin = async (phone, pin) => {
   try {
-    const hashedPin = await bcrypt.hash(newPin, 10);
-    const docRef = doc(db, 'agents', agentId);
-    await updateDoc(docRef, { pin: hashedPin, updatedAt: serverTimestamp() });
-    return { success: true };
+    const email = `${phone}@agent.local`;
+    const userCredential = await signInWithEmailAndPassword(auth, email, pin);
+    const uid = userCredential.user.uid;
+
+    // Fetch agent document from Firestore
+    const agentDoc = await getDocs(query(collection(db, 'agents'), where('id', '==', uid)));
+    if (agentDoc.empty) {
+      return { success: false, error: 'Agent data not found' };
+    }
+    const agentData = agentDoc.docs[0].data();
+    agentData.id = uid;
+    return { success: true, user: agentData };
   } catch (error) {
+    console.error('Agent login error:', error);
     return { success: false, error: error.message };
   }
 };
 
-// Verify agent login (phone + pin)
-export const verifyAgentLogin = async (phone, pin) => {
-  try {
-    const q = query(collection(db, 'agents'), where('phone', '==', phone));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) {
-      return { success: false, error: 'Agent not found' };
-    }
-    const agentDoc = snapshot.docs[0];
-    const agentData = agentDoc.data();
-    const match = await bcrypt.compare(pin, agentData.pin);
-    if (!match) {
-      return { success: false, error: 'Invalid PIN' };
-    }
-    // Return agent without pin
-    const { pin: _, ...safeAgent } = agentData;
-    safeAgent.id = agentDoc.id;
-    safeAgent.role = 'agent';
-    return { success: true, user: safeAgent };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-};
-
-// Demo data seeding (unchanged)
+// ============================================================
+// DEMO DATA SEEDING (updated to use new registerAgent)
+// ============================================================
 export const seedDemoData = async (ownerId) => {
   try {
-    console.log("🔵 Seeding demo data for owner:", ownerId);
-    
     const existingVillages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
     if (existingVillages.length > 0) {
-      console.log("✅ Demo data already exists");
       return { success: true, message: 'Demo data already exists' };
     }
     
@@ -250,10 +229,9 @@ export const seedDemoData = async (ownerId) => {
       { villageName: 'Sultanpur', nextCustomerId: 901 },
       { villageName: 'Devgarh', nextCustomerId: 1001 }
     ];
-    
-    const villagePromises = villages.map(village => 
-      addToFirestore('villages', { ...village, ownerId })
-    );
+    for (const v of villages) {
+      await addToFirestore('villages', { ...v, ownerId });
+    }
     
     const products = [
       { productName: 'Mixer Grinder', price: 3500 },
@@ -262,61 +240,18 @@ export const seedDemoData = async (ownerId) => {
       { productName: 'Ceiling Fan', price: 2800 },
       { productName: 'LED TV 32"', price: 12500 }
     ];
-    
-    const productPromises = products.map(product => 
-      addToFirestore('products', { ...product, ownerId })
-    );
-    
-    // Create demo agent (Rajesh) – now using phone/PIN
-    const agentData = {
-      ownerId,
-      agentName: 'Rajesh Mehta',
-      phone: '9876543210',
-      assignedVillages: [], // Will be updated after villages are created
-      role: 'agent'
-    };
-    
-    await Promise.all(villagePromises);
-    await Promise.all(productPromises);
+    for (const p of products) {
+      await addToFirestore('products', { ...p, ownerId });
+    }
     
     const createdVillages = await getFilteredFromFirestore('villages', 'ownerId', '==', ownerId);
     const villageIds = createdVillages.map(v => v.id);
-    agentData.assignedVillages = villageIds;
     
-    // Register agent with phone and PIN (demo PIN = '1234')
-    const agentRes = await registerAgent(
-      ownerId,
-      agentData.agentName,
-      agentData.phone,
-      '1234',
-      agentData.assignedVillages
-    );
+    // Create demo agent with phone and PIN (PIN = 1234)
+    await registerAgent(ownerId, 'Rajesh Mehta', '9876543210', '1234', villageIds);
     
-    if (!agentRes.success) {
-      throw new Error('Failed to create demo agent');
-    }
-    
-    console.log("✅ Demo data seeded successfully");
-    return { success: true, message: 'Demo data seeded' };
-    
+    return { success: true };
   } catch (error) {
-    console.error("Error seeding demo data:", error);
     return { success: false, error: error.message };
-  }
-};
-
-// Helper function to get all data for an owner
-export const getOwnerData = async (ownerId) => {
-  try {
-    const [villages, products, agents] = await Promise.all([
-      getFilteredFromFirestore('villages', 'ownerId', '==', ownerId),
-      getFilteredFromFirestore('products', 'ownerId', '==', ownerId),
-      getFilteredFromFirestore('agents', 'ownerId', '==', ownerId)
-    ]);
-    
-    return { villages, products, agents };
-  } catch (error) {
-    console.error("Error getting owner data:", error);
-    return { villages: [], products: [], agents: [] };
   }
 };

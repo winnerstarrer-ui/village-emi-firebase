@@ -4,9 +4,6 @@ import { STORAGE_KEYS, getLS, setLS } from '../storage';
 import { useToast } from '../hooks';
 import { Toast, Modal } from '../components/Common';
 
-// ============================================================
-// AGENT MANAGEMENT
-// ============================================================
 export const AgentManagement = ({ user }) => {
   const [agents, setAgents] = useState((getLS(STORAGE_KEYS.AGENTS) || []).filter(a => a.ownerId === user.id));
   const villages = (getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.ownerId === user.id);
@@ -26,18 +23,14 @@ export const AgentManagement = ({ user }) => {
     if (!form.agentName.trim() || !form.phone.trim()) { showToast('Fill required fields', 'error'); return; }
     let all = getLS(STORAGE_KEYS.AGENTS) || [];
     if (editAgent) {
-      // Update agent (name, phone, villages)
-      all = all.map(a => a.id === editAgent.id ? { ...a, agentName: form.agentName, phone: form.phone, assignedVillages: form.assignedVillages } : a);
+      // Update only name and villages (phone cannot be changed, PIN cannot be changed without backend)
+      all = all.map(a => a.id === editAgent.id ? { ...a, agentName: form.agentName, assignedVillages: form.assignedVillages } : a);
       setLS(STORAGE_KEYS.AGENTS, all);
       setAgents(all.filter(a => a.ownerId === user.id));
-      // If PIN was changed, call updateAgentPin
-      if (form.pin) {
-        const res = await FB.updateAgentPin(editAgent.id, form.pin);
-        if (!res.success) { showToast(res.error || 'PIN update failed', 'error'); return; }
-        showToast('Agent updated (PIN changed)');
-      } else {
-        showToast('Agent updated');
-      }
+      // Update Firestore
+      const res = await FB.updateInFirestore('agents', editAgent.id, { agentName: form.agentName, assignedVillages: form.assignedVillages });
+      if (!res.success) showToast(res.error, 'error');
+      else showToast('Agent updated');
     } else {
       // New agent
       if (!form.pin) { showToast('Set a PIN', 'error'); return; }
@@ -96,7 +89,11 @@ export const AgentManagement = ({ user }) => {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn btn-outline btn-sm" onClick={() => { setEditAgent(a); setForm({ agentName: a.agentName, phone: a.phone, pin: '', assignedVillages: a.assignedVillages }); setModalOpen(true); }}>Edit</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => {
+                          setEditAgent(a);
+                          setForm({ agentName: a.agentName, phone: a.phone, pin: '', assignedVillages: a.assignedVillages });
+                          setModalOpen(true);
+                        }}>Edit</button>
                         <button className="btn btn-danger btn-sm" onClick={() => del(a.id)}>Delete</button>
                       </div>
                     </td>
@@ -116,10 +113,12 @@ export const AgentManagement = ({ user }) => {
           <label className="input-label">Phone Number (Login ID)</label>
           <input className="input" type="tel" placeholder="9876543210" value={form.phone} onChange={e => setForm(p => ({...p, phone: e.target.value}))} disabled={!!editAgent} />
         </div>
-        <div className="input-group">
-          <label className="input-label">{editAgent ? 'New PIN (leave blank to keep current)' : 'PIN'}</label>
-          <input className="input" type="password" placeholder="Enter 4-6 digit PIN" value={form.pin} onChange={e => setForm(p => ({...p, pin: e.target.value}))} maxLength="6" />
-        </div>
+        {!editAgent && (
+          <div className="input-group">
+            <label className="input-label">PIN</label>
+            <input className="input" type="password" placeholder="Enter 4-6 digit PIN" value={form.pin} onChange={e => setForm(p => ({...p, pin: e.target.value}))} maxLength="6" />
+          </div>
+        )}
         <div className="input-group">
           <label className="input-label">Assign Villages</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>

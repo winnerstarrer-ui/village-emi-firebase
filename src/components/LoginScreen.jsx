@@ -2,9 +2,6 @@ import { useState } from 'react';
 import * as FB from '../firebaseService';
 import { STORAGE_KEYS, setLS } from '../storage';
 
-// ============================================================
-// LOGIN SCREEN
-// ============================================================
 export const LoginScreen = ({ onLogin }) => {
   const [role, setRole] = useState('owner');
   const [email, setEmail] = useState('');
@@ -20,28 +17,18 @@ export const LoginScreen = ({ onLogin }) => {
     setError('');
 
     if (role === 'owner') {
-      // Owner login
       if (!email || !password) { setError('Fill all fields'); return; }
-      try {
-        const res = await FB.loginUser(email, password);
-        if (!res.success) { setError(res.error || 'Invalid email or password'); return; }
-        const userWithRole = { ...res.user, role: res.role || role };
-        setLS(STORAGE_KEYS.CURRENT_USER, userWithRole);
-        onLogin(userWithRole);
-      } catch (err) {
-        setError(err.message || 'Login failed');
-      }
+      const res = await FB.loginUser(email, password);
+      if (!res.success) { setError(res.error || 'Invalid email or password'); return; }
+      const userWithRole = { ...res.user, role: res.role };
+      setLS(STORAGE_KEYS.CURRENT_USER, userWithRole);
+      onLogin(userWithRole);
     } else {
-      // Agent login with phone + PIN
       if (!phone || !pin) { setError('Enter phone and PIN'); return; }
-      try {
-        const res = await FB.verifyAgentLogin(phone, pin);
-        if (!res.success) { setError(res.error || 'Invalid credentials'); return; }
-        setLS(STORAGE_KEYS.CURRENT_USER, res.user);
-        onLogin(res.user);
-      } catch (err) {
-        setError(err.message || 'Login failed');
-      }
+      const res = await FB.agentLogin(phone, pin);
+      if (!res.success) { setError(res.error || 'Invalid credentials'); return; }
+      setLS(STORAGE_KEYS.CURRENT_USER, res.user);
+      onLogin(res.user);
     }
   };
 
@@ -64,7 +51,6 @@ export const LoginScreen = ({ onLogin }) => {
         {error && <div className="error-msg">{error}</div>}
 
         {role === 'owner' ? (
-          // Owner login fields
           <>
             <div className="input-group">
               <label className="input-label">Email</label>
@@ -76,7 +62,6 @@ export const LoginScreen = ({ onLogin }) => {
             </div>
           </>
         ) : (
-          // Agent login fields
           <>
             <div className="input-group">
               <label className="input-label">Phone Number</label>
