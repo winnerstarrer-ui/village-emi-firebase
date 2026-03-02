@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import * as FB from '../firebaseService';
 import { STORAGE_KEYS, getLS, setLS } from '../storage';
 import { uid, fmt } from '../utils';
 import { useToast } from '../hooks';
 import { Toast } from '../components/Common';
 
 // ============================================================
-// NEW SALE ENTRY
+// NEW SALE ENTRY (FIXED)
 // ============================================================
 export const SalesEntry = ({ user }) => {
   const villages = (getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.ownerId === user.id);
@@ -26,53 +27,118 @@ export const SalesEntry = ({ user }) => {
   const advance = Number(saleForm.advanceAmount) || 0;
   const outstanding = productPrice - advance;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedVillage) { showToast('Select a village', 'error'); return; }
     if (!selectedProduct) { showToast('Select a product', 'error'); return; }
     if (!saleForm.emiAmount) { showToast('Enter EMI amount', 'error'); return; }
 
     let customerId = existingCustomerId;
+    let customerData = null;
 
-    if (isNewCustomer) {
-      if (!custForm.customerName.trim()) { showToast('Enter customer name', 'error'); return; }
-      const allCustomers = getLS(STORAGE_KEYS.CUSTOMERS) || [];
-      const currentVillage = (getLS(STORAGE_KEYS.VILLAGES) || []).find(v => v.id === selectedVillage);
-      const custNum = currentVillage.nextCustomerId;
-      customerId = `c_${selectedVillage}_${custNum}`;
-      allCustomers.push({ id: customerId, ownerId: user.id, villageId: selectedVillage, customerNumber: custNum, customerName: custForm.customerName, phone: custForm.phone || '', address: custForm.address || '' });
-      setLS(STORAGE_KEYS.CUSTOMERS, allCustomers);
-      // Increment village customer counter
-      const allVillages = getLS(STORAGE_KEYS.VILLAGES) || [];
-      setLS(STORAGE_KEYS.VILLAGES, allVillages.map(v => v.id === selectedVillage ? { ...v, nextCustomerId: v.nextCustomerId + 1 } : v));
+    try {
+      // --- Handle customer creation or retrieval ---
+      if (isNewCustomer) {
+        if (!custForm.customerName.trim()) { showToast('Enter customer name', 'error'); return; }
+
+        const allCustomers = getLS(STORAGE_KEYS.CUSTOMERS) || [];
+        const currentVillage = villages.find(v => v.id === selectedVillage);
+        const custNum = currentVillage.nextCustomerId;
+
+        // Prepare customer data
+        const newCustomerData = {
+          ownerId: user.id,
+          villageId: selectedVillage,
+          customerNumber: custNum,
+          customerName: custForm.customerName,
+          phone: custForm.phone || '',
+          address: custForm.address || ''
+        };
+
+        // Save to Firestore
+        const customerRes = await FB.addToFirestore('customers', newCustomerData);
+        if (!customerRes.success) throw new Error(customerRes.error);
+
+        customerId = customerRes.id;
+        customerData = { id: customerId, ...newCustomerData };
+
+        // Update local storage customers
+        allCustomers.push(customerData);
+        setLS(STORAGE_KEYS.CUSTOMERS, allCustomers);
+
+        // Increment village nextCustomerId in Firestore
+        const villageRes = await FB.updateInFirestore('villages', selectedVillage, {
+          nextCustomerId: currentVillage.nextCustomerId + 1
+        });
+        if (!villageRes.success) throw new Error(villageRes.error);
+
+        // Update local storage villages
+        const allVillages = getLS(STORAGE_KEYS.VILLAGES) || [];
+        setLS(STORAGE_KEYS.VILLAGES, allVillages.map(v =>
+          v.id === selectedVillage ? { ...v, nextCustomerId: v.nextCustomerId + 1 } : v
+        ));
+      } else {
+        // Existing customer: just ensure customerId is set
+        if (!existingCustomerId) { showToast('Select a customer', 'error'); return; }
+        // Customer data already exists in local storage, no need to refetch
+      }
+
+      // --- Create the sale ---
+      const saleData = {
+        ownerId: user.id,
+        villageId: selectedVillage,
+        customerId,
+        productName: product.productName,
+        productPrice,
+        advanceAmount: advance,
+        outstandingAmount: outstanding,
+        emiAmount: Number(saleForm.emiAmount),
+        emiFrequency: saleForm.emiFrequency,
+        status: outstanding <= 0 ? 'completed' : 'active',
+        saleDate: new Date(saleForm.saleDate).getTime()
+      };
+
+      const saleRes = await FB.addToFirestore('sales', saleData);
+      if (!saleRes.success) throw new Error(saleRes.error);
+      const newSale = { id: saleRes.id, ...saleData };
+
+      // Update local storage sales
+      const allSales = getLS(STORAGE_KEYS.SALES) || [];
+      allSales.push(newSale);
+      setLS(STORAGE_KEYS.SALES, allSales);
+
+      // --- If advance > 0, record payment ---
+      if (advance > 0) {
+        const paymentData = {
+          ownerId: user.id,
+          villageId: selectedVillage,
+          customerId,
+          saleId: newSale.id,
+          agentId: 'owner',
+          amountCollected: advance,
+          paymentDate: Date.now(),
+          notes: 'Advance'
+        };
+        const paymentRes = await FB.addToFirestore('payments', paymentData);
+        if (!paymentRes.success) throw new Error(paymentRes.error);
+
+        const allPayments = getLS(STORAGE_KEYS.PAYMENTS) || [];
+        allPayments.push({ id: paymentRes.id, ...paymentData });
+        setLS(STORAGE_KEYS.PAYMENTS, allPayments);
+      }
+
+      showToast('Sale recorded successfully!');
+      // Reset form
+      setSelectedVillage('');
+      setSelectedProduct('');
+      setIsNewCustomer(true);
+      setExistingCustomerId('');
+      setCustForm({ customerName: '', phone: '', address: '' });
+      setSaleForm({ advanceAmount: '0', emiAmount: '', emiFrequency: 'weekly', saleDate: new Date().toISOString().split('T')[0] });
+
+    } catch (error) {
+      console.error('Error saving sale:', error);
+      showToast(error.message || 'Failed to save sale', 'error');
     }
-
-    const sale = {
-      id: uid(), ownerId: user.id, villageId: selectedVillage, customerId,
-      productName: product.productName, productPrice, advanceAmount: advance,
-      outstandingAmount: outstanding, emiAmount: Number(saleForm.emiAmount),
-      emiFrequency: saleForm.emiFrequency, status: outstanding <= 0 ? 'completed' : 'active',
-      saleDate: new Date(saleForm.saleDate).getTime()
-    };
-    const allSales = getLS(STORAGE_KEYS.SALES) || [];
-    allSales.push(sale);
-    setLS(STORAGE_KEYS.SALES, allSales);
-
-    // If advance paid, record it as a payment
-    if (advance > 0) {
-      const advPayment = { id: uid(), ownerId: user.id, villageId: selectedVillage, customerId, saleId: sale.id, agentId: 'owner', amountCollected: advance, paymentDate: Date.now(), notes: 'Advance' };
-      const allPayments = getLS(STORAGE_KEYS.PAYMENTS) || [];
-      allPayments.push(advPayment);
-      setLS(STORAGE_KEYS.PAYMENTS, allPayments);
-    }
-
-    showToast('Sale recorded successfully!');
-    // Reset
-    setSelectedVillage('');
-    setSelectedProduct('');
-    setIsNewCustomer(true);
-    setExistingCustomerId('');
-    setCustForm({ customerName: '', phone: '', address: '' });
-    setSaleForm({ advanceAmount: '0', emiAmount: '', emiFrequency: 'weekly', saleDate: new Date().toISOString().split('T')[0] });
   };
 
   return (
@@ -80,7 +146,7 @@ export const SalesEntry = ({ user }) => {
       <Toast toast={toast} />
       <div className="page-header"><div><h2>New Sale</h2><p>Record a new EMI sale</p></div></div>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        {/* Village */}
+        {/* Village (unchanged) */}
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="input-group" style={{ marginBottom: 0 }}>
             <label className="input-label">Select Village</label>
@@ -91,7 +157,7 @@ export const SalesEntry = ({ user }) => {
           </div>
         </div>
 
-        {/* Customer */}
+        {/* Customer (unchanged) */}
         {selectedVillage && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -131,7 +197,7 @@ export const SalesEntry = ({ user }) => {
           </div>
         )}
 
-        {/* Product & EMI Details */}
+        {/* Product & EMI Details (unchanged) */}
         {selectedVillage && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="input-group">
