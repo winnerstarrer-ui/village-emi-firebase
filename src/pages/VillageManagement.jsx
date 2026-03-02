@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import * as FB from '../firebaseService';
 import { STORAGE_KEYS, getLS, setLS } from '../storage';
-import { uid } from '../utils';
 import { useToast } from '../hooks';
-import { Toast } from '../components/Common';
-import { Modal } from '../components/Common';
+import { Toast, Modal } from '../components/Common';
 
 // ============================================================
-// VILLAGE MANAGEMENT
+// VILLAGE MANAGEMENT (FIXED)
 // ============================================================
 export const VillageManagement = ({ user }) => {
   const [villages, setVillages] = useState((getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.ownerId === user.id));
@@ -16,24 +14,55 @@ export const VillageManagement = ({ user }) => {
   const [form, setForm] = useState({ villageName: '', startingId: 801 });
   const { toast, showToast } = useToast();
 
-  const save = () => {
+  const save = async () => {
     if (!form.villageName.trim()) { showToast('Enter village name', 'error'); return; }
-    let all = getLS(STORAGE_KEYS.VILLAGES) || [];
-    if (editVillage) {
-      all = all.map(v => v.id === editVillage.id ? { ...v, villageName: form.villageName } : v);
-      showToast('Village updated');
-    } else {
-      if (villages.find(v => v.villageName.toLowerCase() === form.villageName.toLowerCase())) { showToast('Village name already exists', 'error'); return; }
-      const nv = { id: uid(), ownerId: user.id, villageName: form.villageName, nextCustomerId: Number(form.startingId) || 801 };
-      all.push(nv);
-      FB.addToFirestore('villages', nv);
-      showToast('Village added');
+
+    try {
+      if (editVillage) {
+        // Update existing village in Firestore
+        const updatedData = { villageName: form.villageName };
+        const res = await FB.updateInFirestore('villages', editVillage.id, updatedData);
+        if (!res.success) throw new Error(res.error);
+
+        // Update local storage
+        const allVillages = (getLS(STORAGE_KEYS.VILLAGES) || []).map(v =>
+          v.id === editVillage.id ? { ...v, villageName: form.villageName } : v
+        );
+        setLS(STORAGE_KEYS.VILLAGES, allVillages);
+        setVillages(allVillages.filter(v => v.ownerId === user.id));
+        showToast('Village updated');
+      } else {
+        // Check for duplicate name (optional, but good)
+        const allVillages = getLS(STORAGE_KEYS.VILLAGES) || [];
+        if (allVillages.find(v => v.villageName.toLowerCase() === form.villageName.toLowerCase())) {
+          showToast('Village name already exists', 'error');
+          return;
+        }
+
+        // Create new village in Firestore
+        const newVillageData = {
+          ownerId: user.id,
+          villageName: form.villageName,
+          nextCustomerId: Number(form.startingId) || 801
+        };
+        const res = await FB.addToFirestore('villages', newVillageData);
+        if (!res.success) throw new Error(res.error);
+
+        // Build village object with Firestore ID
+        const newVillage = { id: res.id, ...newVillageData };
+        allVillages.push(newVillage);
+        setLS(STORAGE_KEYS.VILLAGES, allVillages);
+        setVillages(allVillages.filter(v => v.ownerId === user.id));
+        showToast('Village added');
+      }
+
+      setModalOpen(false);
+      setEditVillage(null);
+      setForm({ villageName: '', startingId: 801 });
+    } catch (error) {
+      console.error('Error saving village:', error);
+      showToast(error.message || 'Failed to save village', 'error');
     }
-    setLS(STORAGE_KEYS.VILLAGES, all);
-    setVillages(all.filter(v => v.ownerId === user.id));
-    setModalOpen(false);
-    setEditVillage(null);
-    setForm({ villageName: '', startingId: 801 });
   };
 
   const del = async (id) => {
@@ -44,12 +73,18 @@ export const VillageManagement = ({ user }) => {
       return;
     }
 
-    const res = await FB.deleteFromFirestore('villages', id);
-    if (!res.success) { showToast(res.error || 'Delete failed', 'error'); return; }
-    const all = (getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.id !== id);
-    setLS(STORAGE_KEYS.VILLAGES, all);
-    setVillages(all.filter(v => v.ownerId === user.id));
-    showToast('Village deleted');
+    try {
+      const res = await FB.deleteFromFirestore('villages', id);
+      if (!res.success) throw new Error(res.error);
+
+      const all = (getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.id !== id);
+      setLS(STORAGE_KEYS.VILLAGES, all);
+      setVillages(all.filter(v => v.ownerId === user.id));
+      showToast('Village deleted');
+    } catch (error) {
+      console.error('Error deleting village:', error);
+      showToast(error.message || 'Delete failed', 'error');
+    }
   };
 
   return (
