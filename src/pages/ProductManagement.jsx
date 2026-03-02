@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import * as FB from '../firebaseService';
 import { STORAGE_KEYS, getLS, setLS } from '../storage';
-import { uid, fmt } from '../utils';
+import { fmt } from '../utils';
 import { useToast } from '../hooks';
 import { Toast, Modal } from '../components/Common';
 
 // ============================================================
-// PRODUCT MANAGEMENT
+// PRODUCT MANAGEMENT (FIXED)
 // ============================================================
 export const ProductManagement = ({ user }) => {
   const [products, setProducts] = useState((getLS(STORAGE_KEYS.PRODUCTS) || []).filter(p => p.ownerId === user.id));
@@ -15,20 +15,39 @@ export const ProductManagement = ({ user }) => {
   const [form, setForm] = useState({ productName: '', price: '' });
   const { toast, showToast } = useToast();
 
-  const save = () => {
+  const save = async () => {
     if (!form.productName.trim() || !form.price) { showToast('Fill all fields', 'error'); return; }
     let all = getLS(STORAGE_KEYS.PRODUCTS) || [];
+
     if (editProduct) {
-      all = all.map(p => p.id === editProduct.id ? { ...p, productName: form.productName, price: Number(form.price) } : p);
+      // Update existing product in Firestore
+      const updatedProduct = { productName: form.productName, price: Number(form.price) };
+      const res = await FB.updateInFirestore('products', editProduct.id, updatedProduct);
+      if (!res.success) { showToast(res.error || 'Update failed', 'error'); return; }
+
+      // Update local storage
+      all = all.map(p => p.id === editProduct.id ? { ...p, ...updatedProduct } : p);
+      setLS(STORAGE_KEYS.PRODUCTS, all);
+      setProducts(all.filter(p => p.ownerId === user.id));
       showToast('Product updated');
     } else {
-      const np = { id: uid(), ownerId: user.id, productName: form.productName, price: Number(form.price) };
-      all.push(np);
-      FB.addToFirestore('products', np);
+      // Add new product
+      const productData = {
+        ownerId: user.id,
+        productName: form.productName,
+        price: Number(form.price)
+      };
+      const res = await FB.addToFirestore('products', productData);
+      if (!res.success) { showToast(res.error || 'Add failed', 'error'); return; }
+
+      // Create product object with Firestore document ID
+      const newProduct = { id: res.id, ...productData };
+      all.push(newProduct);
+      setLS(STORAGE_KEYS.PRODUCTS, all);
+      setProducts(all.filter(p => p.ownerId === user.id));
       showToast('Product added');
     }
-    setLS(STORAGE_KEYS.PRODUCTS, all);
-    setProducts(all.filter(p => p.ownerId === user.id));
+
     setModalOpen(false);
     setEditProduct(null);
     setForm({ productName: '', price: '' });
@@ -36,8 +55,7 @@ export const ProductManagement = ({ user }) => {
 
   const del = async (id) => {
     // Check if product has sales before deleting
-    const product = products.find(p => p.id === id);
-    const productSales = (getLS(STORAGE_KEYS.SALES) || []).filter(s => s.productName === product?.productName);
+    const productSales = (getLS(STORAGE_KEYS.SALES) || []).filter(s => s.productName === products.find(p => p.id === id)?.productName);
     if (productSales.length > 0) {
       showToast('Cannot delete product with existing sales', 'error');
       return;
@@ -45,6 +63,7 @@ export const ProductManagement = ({ user }) => {
 
     const res = await FB.deleteFromFirestore('products', id);
     if (!res.success) { showToast(res.error || 'Delete failed', 'error'); return; }
+
     const all = (getLS(STORAGE_KEYS.PRODUCTS) || []).filter(p => p.id !== id);
     setLS(STORAGE_KEYS.PRODUCTS, all);
     setProducts(all.filter(p => p.ownerId === user.id));
