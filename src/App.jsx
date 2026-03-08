@@ -17,7 +17,6 @@ import { VillageManagement } from './pages/VillageManagement';
 import { AgentManagement } from './pages/AgentManagement';
 import { ProductManagement } from './pages/ProductManagement';
 import { SalesEntry } from './pages/SalesEntry';
-import { LoadPreviousRecords } from './pages/LoadPreviousRecords';
 import { CustomerList } from './pages/CustomerList';
 import { Reports } from './pages/Reports';
 
@@ -35,23 +34,65 @@ export default function App() {
 
   const [user, setUser] = useState(() => getLS(STORAGE_KEYS.CURRENT_USER));
   const [page, setPage] = useState('dashboard');
+
   useEffect(() => {
     if (!user || !user.id) return;
+
+    const ownerId = user.role === 'owner' ? user.id : user.ownerId;
+    if (!ownerId) return;
+
     (async () => {
-      const [vs, ps, as, cs, ss, pys] = await Promise.all([
-        FB.getFilteredFromFirestore('villages','ownerId','==',user.id),
-        FB.getFilteredFromFirestore('products','ownerId','==',user.id),
-        FB.getFilteredFromFirestore('agents','ownerId','==',user.id),
-        FB.getFilteredFromFirestore('customers','ownerId','==',user.id),
-        FB.getFilteredFromFirestore('sales','ownerId','==',user.id),
-        FB.getFilteredFromFirestore('payments','ownerId','==',user.id)
-      ]);
-      setLS(STORAGE_KEYS.VILLAGES, vs.map(v => ({ id: v.id, ...v })));
-      setLS(STORAGE_KEYS.PRODUCTS, ps.map(p => ({ id: p.id, ...p })));
-      setLS(STORAGE_KEYS.AGENTS, as.map(a => ({ id: a.id, ...a })));
-      setLS(STORAGE_KEYS.CUSTOMERS, cs.map(c => ({ id: c.id, ...c })));
-      setLS(STORAGE_KEYS.SALES, ss.map(s => ({ id: s.id, ...s })));
-      setLS(STORAGE_KEYS.PAYMENTS, pys.map(p => ({ id: p.id, ...p })));
+      try {
+        // Always fetch villages and products for this owner
+        const [villages, products] = await Promise.all([
+          FB.getFilteredFromFirestore('villages', 'ownerId', '==', ownerId),
+          FB.getFilteredFromFirestore('products', 'ownerId', '==', ownerId)
+        ]);
+
+        const villagesMap = villages.map(v => ({ id: v.id, ...v }));
+        const productsMap = products.map(p => ({ id: p.id, ...p }));
+        setLS(STORAGE_KEYS.VILLAGES, villagesMap);
+        setLS(STORAGE_KEYS.PRODUCTS, productsMap);
+
+        if (user.role === 'owner') {
+          // Owner: fetch all customers, sales, payments, and agents
+          const [customers, sales, payments, agents] = await Promise.all([
+            FB.getFilteredFromFirestore('customers', 'ownerId', '==', ownerId),
+            FB.getFilteredFromFirestore('sales', 'ownerId', '==', ownerId),
+            FB.getFilteredFromFirestore('payments', 'ownerId', '==', ownerId),
+            FB.getFilteredFromFirestore('agents', 'ownerId', '==', ownerId)
+          ]);
+
+          setLS(STORAGE_KEYS.CUSTOMERS, customers.map(c => ({ id: c.id, ...c })));
+          setLS(STORAGE_KEYS.SALES, sales.map(s => ({ id: s.id, ...s })));
+          setLS(STORAGE_KEYS.PAYMENTS, payments.map(p => ({ id: p.id, ...p })));
+          setLS(STORAGE_KEYS.AGENTS, agents.map(a => ({ id: a.id, ...a })));
+        } else {
+          // Agent: fetch only customers from assigned villages
+          const assignedVillageIds = user.assignedVillages || [];
+          const allCustomers = await FB.getFilteredFromFirestore('customers', 'ownerId', '==', ownerId);
+          const agentCustomers = allCustomers.filter(c => assignedVillageIds.includes(c.villageId));
+          const customerIds = agentCustomers.map(c => c.id);
+
+          // Fetch sales for those customers
+          const allSales = await FB.getFilteredFromFirestore('sales', 'ownerId', '==', ownerId);
+          const agentSales = allSales.filter(s => customerIds.includes(s.customerId));
+
+          // Fetch payments for those customers
+          const allPayments = await FB.getFilteredFromFirestore('payments', 'ownerId', '==', ownerId);
+          const agentPayments = allPayments.filter(p => customerIds.includes(p.customerId));
+
+          // Fetch agents (needed for agent names in some views)
+          const agents = await FB.getFilteredFromFirestore('agents', 'ownerId', '==', ownerId);
+
+          setLS(STORAGE_KEYS.CUSTOMERS, agentCustomers.map(c => ({ id: c.id, ...c })));
+          setLS(STORAGE_KEYS.SALES, agentSales.map(s => ({ id: s.id, ...s })));
+          setLS(STORAGE_KEYS.PAYMENTS, agentPayments.map(p => ({ id: p.id, ...p })));
+          setLS(STORAGE_KEYS.AGENTS, agents.map(a => ({ id: a.id, ...a })));
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      }
     })();
   }, [user && user.id]);
 
@@ -65,7 +106,6 @@ export default function App() {
   const ownerNav = [
     { id: 'dashboard', icon: '📊', label: 'Dashboard' },
     { id: 'sales', icon: '💰', label: 'New Sale' },
-    { id: 'load', icon: '📥', label: 'Load Previous Records' },
     { id: 'customers', icon: '👥', label: 'Customers' },
     { id: 'reports', icon: '📈', label: 'Reports' },
     { id: 'villages', icon: '🏘️', label: 'Villages' },
@@ -90,7 +130,6 @@ export default function App() {
         case 'agents': return <AgentManagement user={user} />;
         case 'products': return <ProductManagement user={user} />;
         case 'sales': return <SalesEntry user={user} />;
-        case 'load': return <LoadPreviousRecords user={user} />;
         case 'customers': return <CustomerList user={user} />;
         case 'reports': return <Reports user={user} />;
         default: return <OwnerDashboard user={user} />;
