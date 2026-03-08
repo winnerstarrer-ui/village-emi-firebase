@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import * as FB from '../firebaseService';  // ✅ ADDED: Firebase service
 import { getLS, STORAGE_KEYS, setLS } from '../storage';
 import { uid, fmt, fmtDate, fmtTime, isToday } from '../utils';
 import { useToast } from '../hooks';
@@ -58,44 +59,69 @@ export const AgentFastCollect = ({ user }) => {
     setAmount('');
   };
 
-  const handleCollect = () => {
+  const handleCollect = async () => {
     if (!amount || Number(amount) <= 0) { showToast('Enter valid amount', 'error'); return; }
     if (!selectedSale) { showToast('Select a sale', 'error'); return; }
 
     const village = villages.find(v => v.id === selectedVillage);
     const payment = {
-      id: uid(), ownerId: selectedSale.ownerId, villageId: selectedVillage,
-      customerId: selectedCustomer.id, saleId: selectedSale.id, agentId: user.id,
-      amountCollected: Number(amount), paymentDate: Date.now()
+      // id will be added after Firestore save
+      ownerId: selectedSale.ownerId,
+      villageId: selectedVillage,
+      customerId: selectedCustomer.id,
+      saleId: selectedSale.id,
+      agentId: user.id,
+      amountCollected: Number(amount),
+      paymentDate: Date.now()
     };
 
-    // Save payment
-    const allPayments = getLS(STORAGE_KEYS.PAYMENTS) || [];
-    allPayments.push(payment);
-    setLS(STORAGE_KEYS.PAYMENTS, allPayments);
+    try {
+      // ✅ 1. Save payment to Firestore
+      const paymentRes = await FB.addToFirestore('payments', payment);
+      if (!paymentRes.success) throw new Error(paymentRes.error);
 
-    // Update sale outstanding
-    const allSalesArr = getLS(STORAGE_KEYS.SALES) || [];
-    const saleIdx = allSalesArr.findIndex(s => s.id === selectedSale.id);
-    if (saleIdx !== -1) {
-      allSalesArr[saleIdx].outstandingAmount -= Number(amount);
-      if (allSalesArr[saleIdx].outstandingAmount <= 0) {
-        allSalesArr[saleIdx].outstandingAmount = 0;
-        allSalesArr[saleIdx].status = 'completed';
+      // ✅ 2. Update sale in Firestore
+      const updatedOutstanding = selectedSale.outstandingAmount - Number(amount);
+      const updatedStatus = updatedOutstanding <= 0 ? 'completed' : 'active';
+      const saleUpdate = {
+        outstandingAmount: updatedOutstanding,
+        status: updatedStatus
+      };
+      const saleRes = await FB.updateInFirestore('sales', selectedSale.id, saleUpdate);
+      if (!saleRes.success) throw new Error(saleRes.error);
+
+      // ✅ 3. Now update localStorage (with the Firestore IDs)
+      const paymentWithId = { id: paymentRes.id, ...payment };
+
+      // Save payment
+      const allPayments = getLS(STORAGE_KEYS.PAYMENTS) || [];
+      allPayments.push(paymentWithId);
+      setLS(STORAGE_KEYS.PAYMENTS, allPayments);
+
+      // Update sale outstanding
+      const allSalesArr = getLS(STORAGE_KEYS.SALES) || [];
+      const saleIdx = allSalesArr.findIndex(s => s.id === selectedSale.id);
+      if (saleIdx !== -1) {
+        allSalesArr[saleIdx].outstandingAmount = updatedOutstanding;
+        allSalesArr[saleIdx].status = updatedStatus;
+        setLS(STORAGE_KEYS.SALES, allSalesArr);
       }
-      setLS(STORAGE_KEYS.SALES, allSalesArr);
+
+      showToast(`₹${amount} collected from ${selectedCustomer.customerName}!`);
+      setRecentCollections(prev => [paymentWithId, ...prev].slice(0, 5));
+      setTodayTotal(prev => prev + Number(amount));
+
+      // Reset for next collection
+      setSelectedCustomer(null);
+      setSelectedSale(null);
+      setAmount('');
+      setSearchTerm('');
+      setTimeout(() => { if (searchRef.current) searchRef.current.focus(); }, 100);
+
+    } catch (error) {
+      console.error('Collection error:', error);
+      showToast(error.message || 'Failed to save collection', 'error');
     }
-
-    showToast(`₹${amount} collected from ${selectedCustomer.customerName}!`);
-    setRecentCollections(prev => [payment, ...prev].slice(0, 5));
-    setTodayTotal(prev => prev + Number(amount));
-
-    // Reset for next collection
-    setSelectedCustomer(null);
-    setSelectedSale(null);
-    setAmount('');
-    setSearchTerm('');
-    setTimeout(() => { if (searchRef.current) searchRef.current.focus(); }, 100);
   };
 
   const clearCustomer = () => { setSelectedCustomer(null); setSelectedSale(null); setAmount(''); setSearchTerm(''); };
