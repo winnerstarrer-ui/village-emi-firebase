@@ -1,13 +1,10 @@
 import { useState } from 'react';
 import * as FB from '../firebaseService';
 import { STORAGE_KEYS, getLS, setLS } from '../storage';
-import { uid, fmt } from '../utils';
+import { fmt } from '../utils';
 import { useToast } from '../hooks';
 import { Toast } from '../components/Common';
 
-// ============================================================
-// NEW SALE ENTRY (FIXED)
-// ============================================================
 export const SalesEntry = ({ user }) => {
   const villages = (getLS(STORAGE_KEYS.VILLAGES) || []).filter(v => v.ownerId === user.id);
   const products = (getLS(STORAGE_KEYS.PRODUCTS) || []).filter(p => p.ownerId === user.id);
@@ -15,6 +12,8 @@ export const SalesEntry = ({ user }) => {
   const [isNewCustomer, setIsNewCustomer] = useState(true);
   const [existingCustomerId, setExistingCustomerId] = useState('');
   const [custForm, setCustForm] = useState({ customerName: '', phone: '', address: '' });
+  const [useCustomId, setUseCustomId] = useState(false);  // toggle for custom ID
+  const [customId, setCustomId] = useState('');           // manual ID input
   const [selectedProduct, setSelectedProduct] = useState('');
   const [saleForm, setSaleForm] = useState({ advanceAmount: '0', emiAmount: '', emiFrequency: 'weekly', saleDate: new Date().toISOString().split('T')[0] });
   const { toast, showToast } = useToast();
@@ -27,13 +26,17 @@ export const SalesEntry = ({ user }) => {
   const advance = Number(saleForm.advanceAmount) || 0;
   const outstanding = productPrice - advance;
 
+  // Auto‑generated customer ID preview
+  const autoId = village ? `${village.villageCode}-${village.nextCustomerId}` : '';
+
   const handleSave = async () => {
     if (!selectedVillage) { showToast('Select a village', 'error'); return; }
     if (!selectedProduct) { showToast('Select a product', 'error'); return; }
     if (!saleForm.emiAmount) { showToast('Enter EMI amount', 'error'); return; }
 
-    let customerId = existingCustomerId;
+    let customerId;
     let customerData = null;
+    let finalCustomerNumber;
 
     try {
       // --- Handle customer creation or retrieval ---
@@ -41,14 +44,23 @@ export const SalesEntry = ({ user }) => {
         if (!custForm.customerName.trim()) { showToast('Enter customer name', 'error'); return; }
 
         const allCustomers = getLS(STORAGE_KEYS.CUSTOMERS) || [];
-        const currentVillage = villages.find(v => v.id === selectedVillage);
-        const custNum = currentVillage.nextCustomerId;
+
+        // Determine the customer number
+        if (useCustomId) {
+          if (!customId.trim()) { showToast('Enter custom customer ID', 'error'); return; }
+          // Check uniqueness across all customers of this owner
+          const existing = allCustomers.find(c => c.ownerId === user.id && c.customerNumber === customId.trim());
+          if (existing) { showToast('Customer ID already exists', 'error'); return; }
+          finalCustomerNumber = customId.trim();
+        } else {
+          finalCustomerNumber = autoId;
+        }
 
         // Prepare customer data
         const newCustomerData = {
           ownerId: user.id,
           villageId: selectedVillage,
-          customerNumber: custNum,
+          customerNumber: finalCustomerNumber,
           customerName: custForm.customerName,
           phone: custForm.phone || '',
           address: custForm.address || ''
@@ -65,21 +77,23 @@ export const SalesEntry = ({ user }) => {
         allCustomers.push(customerData);
         setLS(STORAGE_KEYS.CUSTOMERS, allCustomers);
 
-        // Increment village nextCustomerId in Firestore
-        const villageRes = await FB.updateInFirestore('villages', selectedVillage, {
-          nextCustomerId: currentVillage.nextCustomerId + 1
-        });
-        if (!villageRes.success) throw new Error(villageRes.error);
+        // If auto ID was used, increment village nextCustomerId
+        if (!useCustomId) {
+          const villageRes = await FB.updateInFirestore('villages', selectedVillage, {
+            nextCustomerId: village.nextCustomerId + 1
+          });
+          if (!villageRes.success) throw new Error(villageRes.error);
 
-        // Update local storage villages
-        const allVillages = getLS(STORAGE_KEYS.VILLAGES) || [];
-        setLS(STORAGE_KEYS.VILLAGES, allVillages.map(v =>
-          v.id === selectedVillage ? { ...v, nextCustomerId: v.nextCustomerId + 1 } : v
-        ));
+          // Update local storage villages
+          const allVillages = getLS(STORAGE_KEYS.VILLAGES) || [];
+          setLS(STORAGE_KEYS.VILLAGES, allVillages.map(v =>
+            v.id === selectedVillage ? { ...v, nextCustomerId: v.nextCustomerId + 1 } : v
+          ));
+        }
       } else {
         // Existing customer: just ensure customerId is set
         if (!existingCustomerId) { showToast('Select a customer', 'error'); return; }
-        // Customer data already exists in local storage, no need to refetch
+        customerId = existingCustomerId;
       }
 
       // --- Create the sale ---
@@ -101,7 +115,6 @@ export const SalesEntry = ({ user }) => {
       if (!saleRes.success) throw new Error(saleRes.error);
       const newSale = { id: saleRes.id, ...saleData };
 
-      // Update local storage sales
       const allSales = getLS(STORAGE_KEYS.SALES) || [];
       allSales.push(newSale);
       setLS(STORAGE_KEYS.SALES, allSales);
@@ -133,6 +146,8 @@ export const SalesEntry = ({ user }) => {
       setIsNewCustomer(true);
       setExistingCustomerId('');
       setCustForm({ customerName: '', phone: '', address: '' });
+      setUseCustomId(false);
+      setCustomId('');
       setSaleForm({ advanceAmount: '0', emiAmount: '', emiFrequency: 'weekly', saleDate: new Date().toISOString().split('T')[0] });
 
     } catch (error) {
@@ -146,30 +161,46 @@ export const SalesEntry = ({ user }) => {
       <Toast toast={toast} />
       <div className="page-header"><div><h2>New Sale</h2><p>Record a new EMI sale</p></div></div>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        {/* Village (unchanged) */}
+        {/* Village selection */}
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="input-group" style={{ marginBottom: 0 }}>
             <label className="input-label">Select Village</label>
-            <select className="input" value={selectedVillage} onChange={e => { setSelectedVillage(e.target.value); setExistingCustomerId(''); }}>
+            <select className="input" value={selectedVillage} onChange={e => { setSelectedVillage(e.target.value); setExistingCustomerId(''); setUseCustomId(false); setCustomId(''); }}>
               <option value="">Choose village...</option>
               {villages.map(v => <option key={v.id} value={v.id}>{v.villageName}</option>)}
             </select>
           </div>
         </div>
 
-        {/* Customer (unchanged) */}
+        {/* Customer section */}
         {selectedVillage && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               <div className={`role-tab ${isNewCustomer ? 'active' : ''}`} style={{ flex: 1, padding: '8px', borderRadius: 8, cursor: 'pointer', background: isNewCustomer ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '#141620', color: isNewCustomer ? '#fff' : '#94a3b8', border: '1px solid ' + (isNewCustomer ? 'transparent' : '#2a2d3a'), fontSize: 13, fontWeight: 600, textAlign: 'center' }} onClick={() => setIsNewCustomer(true)}>New Customer</div>
               <div className={`role-tab ${!isNewCustomer ? 'active' : ''}`} style={{ flex: 1, padding: '8px', borderRadius: 8, cursor: 'pointer', background: !isNewCustomer ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '#141620', color: !isNewCustomer ? '#fff' : '#94a3b8', border: '1px solid ' + (!isNewCustomer ? 'transparent' : '#2a2d3a'), fontSize: 13, fontWeight: 600, textAlign: 'center' }} onClick={() => setIsNewCustomer(false)}>Existing Customer</div>
             </div>
+
             {isNewCustomer ? (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#141620', borderRadius: 8, marginBottom: 12 }}>
-                  <span style={{ fontSize: 12, color: '#64748b' }}>Customer ID will be:</span>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: '#a78bfa', fontFamily: 'Sora, sans-serif' }}>{village?.villageName?.charAt(0).toUpperCase()}-{village?.nextCustomerId}</span>
+                {/* Auto ID display / Custom ID toggle */}
+                <div style={{ background: '#141620', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <input type="checkbox" id="customIdCheck" checked={useCustomId} onChange={e => setUseCustomId(e.target.checked)} />
+                    <label htmlFor="customIdCheck" style={{ color: '#e2e8f0', fontSize: 14 }}>Use custom customer ID</label>
+                  </div>
+                  {useCustomId ? (
+                    <div className="input-group" style={{ marginBottom: 0 }}>
+                      <label className="input-label">Enter custom ID</label>
+                      <input className="input" placeholder="e.g. CUST-1001" value={customId} onChange={e => setCustomId(e.target.value)} />
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#0b0d14', borderRadius: 8 }}>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>Auto ID will be:</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: '#a78bfa', fontFamily: 'Sora, sans-serif' }}>{autoId}</span>
+                    </div>
+                  )}
                 </div>
+
                 <div className="input-group">
                   <label className="input-label">Customer Name *</label>
                   <input className="input" placeholder="e.g. Ramesh Kumar" value={custForm.customerName} onChange={e => setCustForm(p => ({...p, customerName: e.target.value}))} />
@@ -197,7 +228,7 @@ export const SalesEntry = ({ user }) => {
           </div>
         )}
 
-        {/* Product & EMI Details (unchanged) */}
+        {/* Product & EMI details */}
         {selectedVillage && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="input-group">
