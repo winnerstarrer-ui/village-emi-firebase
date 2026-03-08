@@ -12,8 +12,8 @@ export const SalesEntry = ({ user }) => {
   const [isNewCustomer, setIsNewCustomer] = useState(true);
   const [existingCustomerId, setExistingCustomerId] = useState('');
   const [custForm, setCustForm] = useState({ customerName: '', phone: '', address: '' });
-  const [useCustomId, setUseCustomId] = useState(false);  // toggle for custom ID
-  const [customId, setCustomId] = useState('');           // manual ID input
+  const [useCustomId, setUseCustomId] = useState(false);
+  const [customId, setCustomId] = useState('');
   const [selectedProduct, setSelectedProduct] = useState('');
   const [saleForm, setSaleForm] = useState({ advanceAmount: '0', emiAmount: '', emiFrequency: 'weekly', saleDate: new Date().toISOString().split('T')[0] });
   const { toast, showToast } = useToast();
@@ -26,8 +26,8 @@ export const SalesEntry = ({ user }) => {
   const advance = Number(saleForm.advanceAmount) || 0;
   const outstanding = productPrice - advance;
 
-  // Auto‑generated customer ID preview
-  const autoId = village ? `${village.villageCode}-${village.nextCustomerId}` : '';
+  // Auto‑generated customer ID (just the number as string)
+  const autoId = village ? village.nextCustomerId.toString() : '';
 
   const handleSave = async () => {
     if (!selectedVillage) { showToast('Select a village', 'error'); return; }
@@ -35,7 +35,6 @@ export const SalesEntry = ({ user }) => {
     if (!saleForm.emiAmount) { showToast('Enter EMI amount', 'error'); return; }
 
     let customerId;
-    let customerData = null;
     let finalCustomerNumber;
 
     try {
@@ -60,7 +59,7 @@ export const SalesEntry = ({ user }) => {
         const newCustomerData = {
           ownerId: user.id,
           villageId: selectedVillage,
-          customerNumber: finalCustomerNumber,
+          customerNumber: finalCustomerNumber,  // store as string
           customerName: custForm.customerName,
           phone: custForm.phone || '',
           address: custForm.address || ''
@@ -71,7 +70,7 @@ export const SalesEntry = ({ user }) => {
         if (!customerRes.success) throw new Error(customerRes.error);
 
         customerId = customerRes.id;
-        customerData = { id: customerId, ...newCustomerData };
+        const customerData = { id: customerId, ...newCustomerData };
 
         // Update local storage customers
         allCustomers.push(customerData);
@@ -191,7 +190,7 @@ export const SalesEntry = ({ user }) => {
                   {useCustomId ? (
                     <div className="input-group" style={{ marginBottom: 0 }}>
                       <label className="input-label">Enter custom ID</label>
-                      <input className="input" placeholder="e.g. CUST-1001" value={customId} onChange={e => setCustomId(e.target.value)} />
+                      <input className="input" placeholder="e.g. 1001 or any string" value={customId} onChange={e => setCustomId(e.target.value)} />
                     </div>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#0b0d14', borderRadius: 8 }}>
@@ -228,7 +227,7 @@ export const SalesEntry = ({ user }) => {
           </div>
         )}
 
-        {/* Product & EMI details */}
+        {/* Product & EMI details (unchanged) */}
         {selectedVillage && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="input-group">
