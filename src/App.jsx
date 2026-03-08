@@ -34,12 +34,20 @@ export default function App() {
 
   const [user, setUser] = useState(() => getLS(STORAGE_KEYS.CURRENT_USER));
   const [page, setPage] = useState('dashboard');
+  const [dataLoaded, setDataLoaded] = useState(false); // ✅ NEW: loading state
 
   useEffect(() => {
-    if (!user || !user.id) return;
+    if (!user || !user.id) {
+      // If no user, we don't need to load data
+      setDataLoaded(true);
+      return;
+    }
 
     const ownerId = user.role === 'owner' ? user.id : user.ownerId;
-    if (!ownerId) return;
+    if (!ownerId) {
+      setDataLoaded(true);
+      return;
+    }
 
     (async () => {
       try {
@@ -90,15 +98,39 @@ export default function App() {
           setLS(STORAGE_KEYS.PAYMENTS, agentPayments.map(p => ({ id: p.id, ...p })));
           setLS(STORAGE_KEYS.AGENTS, agents.map(a => ({ id: a.id, ...a })));
         }
+
+        // ✅ Data loaded successfully
+        setDataLoaded(true);
       } catch (error) {
         console.error('Error loading data:', error);
+        // Still mark as loaded to avoid infinite spinner
+        setDataLoaded(true);
       }
     })();
-  }, [user && user.id]);
+  }, [user && user.id]); // runs when user logs in or user ID changes
 
-  const handleLogout = () => { setLS(STORAGE_KEYS.CURRENT_USER, null); setUser(null); setPage('dashboard'); };
+  const handleLogout = () => {
+    setLS(STORAGE_KEYS.CURRENT_USER, null);
+    setUser(null);
+    setPage('dashboard');
+    setDataLoaded(false); // ✅ reset for next login
+  };
 
+  // If no user, show login screen
   if (!user) return (<><GlobalStyles /><LoginScreen onLogin={setUser} /></>);
+
+  // ✅ Show loading spinner while data is being fetched
+  if (!dataLoaded) {
+    return (
+      <>
+        <GlobalStyles />
+        <div className="loading-screen">
+          <div className="spinner"></div>
+          <p>Loading your data...</p>
+        </div>
+      </>
+    );
+  }
 
   const isOwner = user.role === 'owner';
 
